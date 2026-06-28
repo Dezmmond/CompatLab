@@ -1,16 +1,16 @@
-.PHONY: test build run-scan fmt vet
+.PHONY: test lint format run-scan run-profiles
 
 test:
-    go test ./...
+    uv run pytest
 
-build:
-    go build -o bin/compatlab ./cmd/compatlab
+lint:
+    uv run ruff check .
+
+format:
+    uv run ruff format .
 
 run-scan:
-    go run ./cmd/compatlab scan /bin/bash
+    uv run compatlab scan /bin/bash
 
-fmt:
-    go fmt ./...
-
-vet:
-    go vet ./...
+run-profiles:
+    uv run compatlab profiles list
