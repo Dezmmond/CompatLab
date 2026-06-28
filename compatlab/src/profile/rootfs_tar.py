@@ -36,6 +36,12 @@ def read_text_file(tar_path: str, path: str) -> str | None:
         return extracted.read().decode("utf-8", errors="replace")
 
 
+def path_exists(tar_path: str, path: str) -> bool:
+    normalized = _normalize_path(path)
+    with tarfile.open(tar_path) as archive:
+        return _find_member(archive, normalized) is not None
+
+
 def parse_os_release_from_tar(tar_path: str) -> OsReleaseFacts:
     return parse_os_release(read_text_file(tar_path, "/etc/os-release") or "")
 

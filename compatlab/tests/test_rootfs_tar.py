@@ -8,6 +8,7 @@ from compatlab.src.profile.rootfs_tar import (
     list_libraries,
     list_symbol_library_candidates,
     parse_os_release_from_tar,
+    path_exists,
     read_text_file,
 )
 
@@ -51,6 +52,14 @@ def test_read_text_file_reads_normalized_path(tmp_path: Path) -> None:
 
     assert content is not None
     assert "Ubuntu 22.04 LTS" in content
+
+
+def test_path_exists_checks_normalized_path(tmp_path: Path) -> None:
+    rootfs = tmp_path / "rootfs.tar"
+    _write_rootfs_tar(rootfs)
+
+    assert path_exists(str(rootfs), "/etc/os-release") is True
+    assert path_exists(str(rootfs), "/usr/bin/apt-get") is False
 
 
 def test_parse_os_release_from_tar_extracts_os_facts(tmp_path: Path) -> None:
