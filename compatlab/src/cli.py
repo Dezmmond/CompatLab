@@ -41,6 +41,7 @@ from .profile.runtime_presets import (
     get_runtime_preset,
     list_runtime_presets,
 )
+from .report.html import HtmlReportContext, write_html_report
 from .report.json import write_json_report
 from .report.pretty import render_profiles, render_report
 
@@ -89,6 +90,9 @@ def scan(
         typer.Option("--fail-on", help="Fail on diagnostics: error, warning, or never."),
     ] = FailOn.ERROR,
     json_output: Annotated[Path | None, typer.Option("--json", help="Write JSON report.")] = None,
+    html_output: Annotated[
+        Path | None, typer.Option("--html", help="Write static HTML report.")
+    ] = None,
 ) -> None:
     """Scan one Linux artifact and print a structured stub report."""
     report = scan_path(path)
@@ -111,8 +115,17 @@ def scan(
             }
         )
     report = _with_diagnostics(report)
-    if json_output is not None:
-        write_json_report(report, json_output)
+    _write_reports(
+        report,
+        json_output=json_output,
+        html_output=html_output,
+        html_context=HtmlReportContext(
+            report_type="scan",
+            command_mode="scan",
+            bundle_root=str(bundle_root) if bundle_root is not None else None,
+            recursive=recursive,
+        ),
+    )
     render_report(report, console)
     if should_fail_for_diagnostics(report.diagnostics, fail_on):
         raise typer.Exit(1)
@@ -144,6 +157,9 @@ def compare(
         typer.Option("--fail-on", help="Fail on diagnostics: error, warning, or never."),
     ] = FailOn.ERROR,
     json_output: Annotated[Path | None, typer.Option("--json", help="Write JSON report.")] = None,
+    html_output: Annotated[
+        Path | None, typer.Option("--html", help="Write static HTML report.")
+    ] = None,
 ) -> None:
     """Compare one Linux artifact with a target profile."""
     if (target is None) == (target_file is None):
@@ -178,8 +194,17 @@ def compare(
             }
         )
         report = _with_diagnostics(report)
-        if json_output is not None:
-            write_json_report(report, json_output)
+        _write_reports(
+            report,
+            json_output=json_output,
+            html_output=html_output,
+            html_context=_compare_html_context(
+                target=target,
+                target_file=target_file,
+                bundle_root=bundle_root,
+                recursive=recursive,
+            ),
+        )
         render_report(report, console)
         raise typer.Exit(2)
 
@@ -224,8 +249,17 @@ def compare(
     else:
         report = compare_report(scan_report, profile)
     report = _with_diagnostics(report)
-    if json_output is not None:
-        write_json_report(report, json_output)
+    _write_reports(
+        report,
+        json_output=json_output,
+        html_output=html_output,
+        html_context=_compare_html_context(
+            target=target,
+            target_file=target_file,
+            bundle_root=bundle_root,
+            recursive=recursive,
+        ),
+    )
     render_report(report, console)
     if should_fail_for_diagnostics(report.diagnostics, fail_on):
         raise typer.Exit(1)
@@ -242,6 +276,42 @@ def _with_diagnostics(report):
             "diagnostics": diagnostics,
             "summary": summarize_diagnostics(diagnostics),
         }
+    )
+
+
+def _write_reports(
+    report,
+    *,
+    json_output: Path | None,
+    html_output: Path | None,
+    html_context: HtmlReportContext,
+) -> None:
+    try:
+        if json_output is not None:
+            write_json_report(report, json_output)
+        if html_output is not None:
+            write_html_report(report, html_output, context=html_context)
+    except OSError as exc:
+        console.print(f"[red]Could not write report: {exc}[/red]")
+        raise typer.Exit(2) from exc
+
+
+def _compare_html_context(
+    *,
+    target: str | None,
+    target_file: Path | None,
+    bundle_root: Path | None,
+    recursive: bool,
+) -> HtmlReportContext:
+    target_selector = (
+        target if target is not None else str(target_file) if target_file is not None else None
+    )
+    return HtmlReportContext(
+        report_type="compare",
+        command_mode="compare",
+        target_selector=target_selector,
+        bundle_root=str(bundle_root) if bundle_root is not None else None,
+        recursive=recursive,
     )
 
 
