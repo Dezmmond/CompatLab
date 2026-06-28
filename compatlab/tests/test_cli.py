@@ -110,6 +110,33 @@ def test_scan_command_writes_json_report(tmp_path: Path) -> None:
     assert raw["diagnostics"][0]["code"] == "CL_ELF_SCAN_FAILED"
 
 
+def test_scan_command_writes_html_report(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+    report = tmp_path / "report.html"
+
+    result = runner.invoke(app, ["scan", str(artifact), "--html", str(report)])
+
+    assert result.exit_code == 0
+    html = report.read_text(encoding="utf-8")
+    assert "CompatLab ArtifactDoctor" in html
+    assert "Diagnostics" in html
+    assert "CL_ELF_SCAN_FAILED" in html
+
+
+def test_scan_command_rejects_invalid_html_output_path(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+
+    result = runner.invoke(
+        app,
+        ["scan", str(artifact), "--html", str(tmp_path / "missing" / "report.html")],
+    )
+
+    assert result.exit_code == 2
+    assert "Could not write report" in result.output
+
+
 def test_scan_command_fail_on_warning_returns_nonzero(tmp_path: Path) -> None:
     artifact = tmp_path / "demo-app"
     artifact.write_bytes(b"not really elf yet")
@@ -181,6 +208,30 @@ def test_scan_command_writes_bundle_dependency_graph(
     assert raw["dependency_graph"]["edges"][0]["resolution_kind"] == "missing"
     assert "Dependency Resolution" in result.output
     assert "Diagnostics" in result.output
+
+
+def test_scan_command_writes_json_and_html_together(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+    json_report = tmp_path / "report.json"
+    html_report = tmp_path / "report.html"
+
+    result = runner.invoke(
+        app,
+        [
+            "scan",
+            str(artifact),
+            "--json",
+            str(json_report),
+            "--html",
+            str(html_report),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json_report.exists()
+    assert html_report.exists()
+    assert "CL_ELF_SCAN_FAILED" in html_report.read_text(encoding="utf-8")
 
 
 def test_scan_command_smoke_scans_bin_bash() -> None:
@@ -339,6 +390,140 @@ def test_compare_command_fail_on_never_writes_diagnostic_json(
     raw = json.loads(output.read_text(encoding="utf-8"))
     assert raw["summary"]["status"] == "failed"
     assert raw["diagnostics"][0]["code"] == "CL_LIB_MISSING"
+
+
+def test_compare_command_writes_html_report_on_scan_error(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+    output = tmp_path / "report.html"
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target", "ubuntu-1804", "--html", str(output)],
+    )
+
+    assert result.exit_code == 2
+    html = output.read_text(encoding="utf-8")
+    assert "CompatLab ArtifactDoctor" in html
+    assert "compare" in html
+    assert "CL_ELF_SCAN_FAILED" in html
+
+
+def test_compare_command_fail_on_never_writes_html_and_returns_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"elf")
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.html"
+    _write_profile(profile)
+
+    monkeypatch.setattr(
+        "compatlab.src.cli.scan_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "never",
+            "--html",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "CL_LIB_MISSING" in output.read_text(encoding="utf-8")
+
+
+def test_compare_command_fail_on_error_writes_html_before_nonzero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"elf")
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.html"
+    _write_profile(profile)
+
+    monkeypatch.setattr(
+        "compatlab.src.cli.scan_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "error",
+            "--html",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert output.exists()
+    assert "CL_LIB_MISSING" in output.read_text(encoding="utf-8")
+
+
+def test_compare_command_writes_json_and_html_together(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"elf")
+    profile = tmp_path / "local.yaml"
+    json_output = tmp_path / "report.json"
+    html_output = tmp_path / "report.html"
+    _write_profile(profile)
+
+    monkeypatch.setattr(
+        "compatlab.src.cli.scan_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--json",
+            str(json_output),
+            "--html",
+            str(html_output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json_output.exists()
+    assert html_output.exists()
+    assert "CompatLab ArtifactDoctor" in html_output.read_text(encoding="utf-8")
 
 
 def test_profiles_list_outputs_builtin_profiles() -> None:

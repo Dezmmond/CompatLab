@@ -43,6 +43,32 @@ compatlab profiles detect --from-image ubuntu:22.04 --json image-facts.json
 compatlab profiles detect --from-image ubuntu:22.04 --runtime-preset cpp-runtime --json runtime-facts.json
 ```
 
+## HTML Reports
+
+CompatLab can write static, self-contained HTML reports for `scan` and
+`compare`. No server, CDN, or JavaScript application is required. HTML reports
+are intended for human review in CI artifacts, release checks, and bug reports;
+JSON remains the stable machine-readable format.
+
+```bash
+uv run compatlab scan ./dist/my-app \
+  --bundle-root ./dist \
+  --recursive \
+  --html report.html
+
+uv run compatlab compare ./dist/my-app \
+  --target ubuntu-2204 \
+  --bundle-root ./dist \
+  --recursive \
+  --fail-on warning \
+  --json report.json \
+  --html report.html
+```
+
+The HTML report includes the diagnostic summary, normalized diagnostic issues,
+bundle dependency resolution details, legacy compatibility problems and
+warnings, and compact ELF/target metadata.
+
 ## Docker Image Profiles
 
 CompatLab can generate a target profile from a Docker image without requiring
