@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from compatlab.src.cli import app
 from compatlab.src.bundle.models import DependencyEdge, DependencyGraph, DependencyResolutionKind
 from compatlab.src.bundle.resolver import BundleResolutionResult
+from compatlab.src.elfscan.models import ElfInfo
 from compatlab.src.profile.docker_cli import DockerError
 from compatlab.src.profile.loader import load_profile_file
 from compatlab.src.profile.models import (
@@ -16,6 +17,7 @@ from compatlab.src.profile.models import (
     SystemFacts,
     SymbolVersionFacts,
 )
+from compatlab.src.report.models import ArtifactInfo, ArtifactReport
 
 
 runner = CliRunner()
@@ -103,6 +105,27 @@ def test_scan_command_writes_json_report(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert report.exists()
     assert '"tool": "compatlab"' in report.read_text(encoding="utf-8")
+    raw = json.loads(report.read_text(encoding="utf-8"))
+    assert raw["summary"]["status"] == "warning"
+    assert raw["diagnostics"][0]["code"] == "CL_ELF_SCAN_FAILED"
+
+
+def test_scan_command_fail_on_warning_returns_nonzero(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+
+    result = runner.invoke(app, ["scan", str(artifact), "--fail-on", "warning"])
+
+    assert result.exit_code == 1
+
+
+def test_scan_command_fail_on_never_returns_zero_for_diagnostics(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+
+    result = runner.invoke(app, ["scan", str(artifact), "--fail-on", "never"])
+
+    assert result.exit_code == 0
 
 
 def test_scan_command_writes_bundle_dependency_graph(
@@ -116,6 +139,13 @@ def test_scan_command_writes_bundle_dependency_graph(
     graph = DependencyGraph(
         entrypoint_artifact_id="demo-app",
         edges=[
+            DependencyEdge(
+                from_artifact_id="demo-app",
+                needed_name="libfoo.so",
+                resolution_kind=DependencyResolutionKind.MISSING,
+            )
+        ],
+        unresolved_dependencies=[
             DependencyEdge(
                 from_artifact_id="demo-app",
                 needed_name="libfoo.so",
@@ -137,6 +167,8 @@ def test_scan_command_writes_bundle_dependency_graph(
             "--bundle-root",
             str(bundle),
             "--recursive",
+            "--fail-on",
+            "never",
             "--json",
             str(output),
         ],
@@ -144,8 +176,11 @@ def test_scan_command_writes_bundle_dependency_graph(
 
     assert result.exit_code == 0
     raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["summary"]["issue_codes"]["CL_LIB_MISSING"] == 1
+    assert "CL_LIB_MISSING" in {issue["code"] for issue in raw["diagnostics"]}
     assert raw["dependency_graph"]["edges"][0]["resolution_kind"] == "missing"
     assert "Dependency Resolution" in result.output
+    assert "Diagnostics" in result.output
 
 
 def test_scan_command_smoke_scans_bin_bash() -> None:
@@ -227,6 +262,83 @@ def test_compare_command_requires_exactly_one_target_selector(tmp_path: Path) ->
     assert both.exit_code == 2
     assert "Provide exactly one" in neither.output
     assert "Provide exactly one" in both.output
+
+
+def test_compare_command_fail_on_warning_returns_nonzero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"elf")
+    profile = tmp_path / "local.yaml"
+    _write_profile(profile)
+
+    monkeypatch.setattr(
+        "compatlab.src.cli.scan_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                runpath=["/tmp/build/lib"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "warning",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "CL_RPATH_ABSOLUTE" in result.output
+
+
+def test_compare_command_fail_on_never_writes_diagnostic_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"elf")
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.json"
+    _write_profile(profile)
+
+    monkeypatch.setattr(
+        "compatlab.src.cli.scan_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "never",
+            "--json",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["summary"]["status"] == "failed"
+    assert raw["diagnostics"][0]["code"] == "CL_LIB_MISSING"
 
 
 def test_profiles_list_outputs_builtin_profiles() -> None:

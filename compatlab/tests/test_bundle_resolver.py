@@ -105,3 +105,27 @@ def test_marks_ambiguous_and_missing_dependencies(tmp_path: Path, monkeypatch) -
         DependencyResolutionKind.MISSING,
     ]
     assert len(result.graph.unresolved_dependencies) == 2
+
+
+def test_warns_for_runtime_paths_that_escape_bundle_or_use_unknown_tokens(
+    tmp_path: Path, monkeypatch
+) -> None:
+    bundle = tmp_path / "dist"
+    app = bundle / "bin" / "app"
+    app.parent.mkdir(parents=True)
+    app.write_bytes(b"app")
+
+    monkeypatch.setattr(
+        "compatlab.src.bundle.resolver.scan_path",
+        lambda path: _report(
+            path,
+            ElfInfo(runpath=["$ORIGIN/../../outside:$LIB"]),
+        ),
+    )
+
+    result = resolve_bundle_dependencies(app, bundle, target=_profile())
+
+    assert [warning.id for warning in result.warnings] == [
+        "bundle.rpath_escapes_bundle",
+        "bundle.rpath_unresolved_token",
+    ]
