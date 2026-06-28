@@ -1,0 +1,2 @@
+ldd (Ubuntu GLIBC 2.39-0ubuntu8.4) 2.39
+Copyright (C) 2024 Free Software Foundation, Inc.
