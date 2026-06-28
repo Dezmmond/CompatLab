@@ -37,15 +37,16 @@ def generate_target_profile_from_facts(
         metadata=ProfileMetadata(
             generated_by="compatlab",
             generated_at=timestamp.isoformat().replace("+00:00", "Z"),
-            source="docker-image" if facts.source_image is not None else "current-system",
+            source=_metadata_source(facts),
             source_image=facts.source_image,
             source_image_id=facts.source_image_id,
             source_os_id=facts.os_release.id,
             source_os_version_id=facts.os_release.version_id,
-            detection_backend=(
-                "docker-rootfs-export" if facts.source_image is not None else "local-system"
-            ),
+            detection_backend=_detection_backend(facts),
             platform=facts.platform,
+            runtime_preset=facts.runtime_preset,
+            runtime_packages=facts.runtime_packages or None,
+            package_manager=facts.package_manager,
         ),
         notes="Generated from current system facts.",
     )
@@ -55,6 +56,22 @@ def _profile_name(facts: SystemFacts, name: str) -> str:
     if facts.os_release.pretty_name:
         return facts.os_release.pretty_name
     return name
+
+
+def _metadata_source(facts: SystemFacts) -> str:
+    if facts.source_image is None:
+        return "current-system"
+    if facts.runtime_preset is not None:
+        return "docker-runtime-image"
+    return "docker-image"
+
+
+def _detection_backend(facts: SystemFacts) -> str:
+    if facts.source_image is None:
+        return "local-system"
+    if facts.runtime_preset is not None:
+        return "docker-runtime-rootfs-export"
+    return "docker-rootfs-export"
 
 
 def _max_or_detected(versions: list[str], facts: SystemFacts) -> str:

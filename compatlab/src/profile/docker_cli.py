@@ -42,14 +42,28 @@ class DockerClient:
         result = self.runner(command, self.timeout)
         return _require_success(result, f"Docker image pull failed for '{image}'.")
 
-    def create_container(self, image: str, platform: str | None = None) -> str:
+    def create_container(
+        self,
+        image: str,
+        platform: str | None = None,
+        command_args: list[str] | None = None,
+    ) -> str:
         command = ["docker", "create"]
         if platform is not None:
             command.extend(["--platform", platform])
         command.append(image)
+        if command_args is not None:
+            command.extend(command_args)
         result = self.runner(command, self.timeout)
         container_id = _require_success(result, f"Docker container create failed for '{image}'.")
         return container_id.strip()
+
+    def start_container_attached(self, container_id: str) -> None:
+        result = self.runner(["docker", "start", "--attach", container_id], self.timeout)
+        _require_success(
+            result,
+            f"Package installation failed in temporary container '{container_id}'.",
+        )
 
     def export_container(self, container_id: str, output: Path) -> None:
         result = self.runner(
@@ -77,6 +91,31 @@ class DockerClient:
 
         container_id = self.create_container(image, platform=platform)
         try:
+            self.export_container(container_id, output)
+        finally:
+            self.remove_container(container_id)
+
+    def export_runtime_rootfs(
+        self,
+        image: str,
+        output: Path,
+        install_script: str,
+        *,
+        platform: str | None = None,
+        pull: bool = False,
+    ) -> None:
+        if pull:
+            self.pull_image(image, platform=platform)
+        else:
+            self.inspect_image(image)
+
+        container_id = self.create_container(
+            image,
+            platform=platform,
+            command_args=["sh", "-c", install_script],
+        )
+        try:
+            self.start_container_attached(container_id)
             self.export_container(container_id, output)
         finally:
             self.remove_container(container_id)
