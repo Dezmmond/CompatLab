@@ -20,6 +20,7 @@ compatlab scan ./dist/my-app --bundle-root ./dist --recursive
 compatlab compare ./app --target ubuntu-1804
 compatlab compare ./app --target-file ./local.yaml
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive
+compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --fail-on warning
 compatlab profiles list
 compatlab profiles show ubuntu-1804
 compatlab profiles detect
@@ -36,6 +37,7 @@ JSON report output is wired for scan and compare:
 compatlab scan ./app --json report.json
 compatlab compare ./app --target ubuntu-1804 --json report.json
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --json report.json
+compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --fail-on never --json report.json
 compatlab profiles detect --json system-facts.json
 compatlab profiles detect --from-image ubuntu:22.04 --json image-facts.json
 compatlab profiles detect --from-image ubuntu:22.04 --runtime-preset cpp-runtime --json runtime-facts.json
@@ -120,6 +122,54 @@ Conservative limits are available for large bundles:
 
 ```bash
 uv run compatlab scan ./dist/my-app --bundle-root ./dist --recursive --max-depth 10 --max-files 500
+```
+
+## Diagnostics and CI Gates
+
+CompatLab JSON reports include a stable `summary` object and normalized
+`diagnostics` issues for scripts and CI systems. Diagnostics use stable codes
+such as `CL_LIB_MISSING`, `CL_SYMBOL_GLIBCXX_TOO_NEW`, and
+`CL_RPATH_ABSOLUTE`.
+
+Use `--fail-on` to decide which diagnostics should fail a CI job:
+
+- `error`: fail when at least one error diagnostic exists; this is the default;
+- `warning`: fail when at least one warning or error diagnostic exists;
+- `never`: do not fail because of diagnostics if the command completed.
+
+```bash
+uv run compatlab compare ./dist/my-app \
+  --target ubuntu-2204 \
+  --bundle-root ./dist \
+  --recursive \
+  --fail-on warning
+```
+
+```bash
+uv run compatlab compare ./dist/my-app \
+  --target-file ./profiles/prod.yaml \
+  --bundle-root ./dist \
+  --recursive \
+  --fail-on never \
+  --json report.json
+```
+
+Reports include counters and issue-code totals:
+
+```json
+{
+  "summary": {
+    "status": "failed",
+    "errors": 1,
+    "warnings": 1,
+    "infos": 0,
+    "issue_codes": {
+      "CL_LIB_MISSING": 1,
+      "CL_RPATH_ABSOLUTE": 1
+    }
+  },
+  "diagnostics": []
+}
 ```
 
 ## MVP Scope

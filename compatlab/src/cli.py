@@ -15,6 +15,12 @@ from .bundle.resolver import (
     resolve_bundle_dependencies,
 )
 from .compare.engine import compare_report
+from .diagnostics import (
+    FailOn,
+    diagnostics_from_report_parts,
+    should_fail_for_diagnostics,
+    summarize_diagnostics,
+)
 from .elfscan.scanner import scan_path
 from .problem.models import Problem
 from .profile.detect import detect_current_system
@@ -78,6 +84,10 @@ def scan(
     max_files: Annotated[
         int, typer.Option("--max-files", help="Maximum files to index under bundle root.")
     ] = DEFAULT_MAX_FILES,
+    fail_on: Annotated[
+        FailOn,
+        typer.Option("--fail-on", help="Fail on diagnostics: error, warning, or never."),
+    ] = FailOn.ERROR,
     json_output: Annotated[Path | None, typer.Option("--json", help="Write JSON report.")] = None,
 ) -> None:
     """Scan one Linux artifact and print a structured stub report."""
@@ -100,9 +110,12 @@ def scan(
                 "warnings": [*report.warnings, *resolution.warnings],
             }
         )
+    report = _with_diagnostics(report)
     if json_output is not None:
         write_json_report(report, json_output)
     render_report(report, console)
+    if should_fail_for_diagnostics(report.diagnostics, fail_on):
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -126,6 +139,10 @@ def compare(
     max_files: Annotated[
         int, typer.Option("--max-files", help="Maximum files to index under bundle root.")
     ] = DEFAULT_MAX_FILES,
+    fail_on: Annotated[
+        FailOn,
+        typer.Option("--fail-on", help="Fail on diagnostics: error, warning, or never."),
+    ] = FailOn.ERROR,
     json_output: Annotated[Path | None, typer.Option("--json", help="Write JSON report.")] = None,
 ) -> None:
     """Compare one Linux artifact with a target profile."""
@@ -160,6 +177,7 @@ def compare(
                 ],
             }
         )
+        report = _with_diagnostics(report)
         if json_output is not None:
             write_json_report(report, json_output)
         render_report(report, console)
@@ -205,11 +223,26 @@ def compare(
         )
     else:
         report = compare_report(scan_report, profile)
+    report = _with_diagnostics(report)
     if json_output is not None:
         write_json_report(report, json_output)
     render_report(report, console)
-    if not report.is_compatible:
+    if should_fail_for_diagnostics(report.diagnostics, fail_on):
         raise typer.Exit(1)
+
+
+def _with_diagnostics(report):
+    diagnostics = diagnostics_from_report_parts(
+        problems=report.problems,
+        warnings=report.warnings,
+        graph=report.dependency_graph,
+    )
+    return report.model_copy(
+        update={
+            "diagnostics": diagnostics,
+            "summary": summarize_diagnostics(diagnostics),
+        }
+    )
 
 
 def _dependency_problems(graph: DependencyGraph) -> list[Problem]:

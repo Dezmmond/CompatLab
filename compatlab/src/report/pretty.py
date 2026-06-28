@@ -30,6 +30,9 @@ def render_report(report: ArtifactReport, console: Console) -> None:
         console.print(f"[bold]Warnings:[/bold] {len(report.warnings)}")
     if report.dependency_graph is not None:
         _render_dependency_graph(report, console)
+    if report.diagnostics:
+        _render_diagnostics(report, console)
+    _render_summary(report, console)
 
     if report.problems:
         table = Table(title="Problems")
@@ -96,6 +99,40 @@ def _render_dependency_graph(report: ArtifactReport, console: Console) -> None:
         resolved = edge.resolved_artifact_id or edge.resolved_path or edge.message or ""
         table.add_row(edge.from_artifact_id, edge.needed_name, edge.resolution_kind.value, resolved)
     console.print(table)
+
+
+def _render_diagnostics(report: ArtifactReport, console: Console) -> None:
+    table = Table(title="Diagnostics")
+    table.add_column("Severity")
+    table.add_column("Code", no_wrap=True)
+    table.add_column("Title")
+    table.add_column("Affected")
+    table.add_column("Hint")
+    for issue in report.diagnostics:
+        table.add_row(
+            issue.severity.value.upper(),
+            issue.code,
+            issue.title,
+            issue.dependency_name or issue.affected_path or "",
+            issue.hint or "",
+        )
+    console.print(table)
+
+
+def _render_summary(report: ArtifactReport, console: Console) -> None:
+    summary = report.summary
+    style = (
+        "red"
+        if summary.status == "failed"
+        else "yellow"
+        if summary.status == "warning"
+        else "green"
+    )
+    console.print("[bold]Summary:[/bold]")
+    console.print(f"  [bold]Status:[/bold] [{style}]{summary.status}[/{style}]")
+    console.print(f"  [bold]Errors:[/bold] {summary.errors}")
+    console.print(f"  [bold]Warnings:[/bold] {summary.warnings}")
+    console.print(f"  [bold]Infos:[/bold] {summary.infos}")
 
 
 def _render_list(console: Console, title: str, values: list[str], empty: str | None = None) -> None:
