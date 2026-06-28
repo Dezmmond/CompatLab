@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from compatlab.src.cli import app
+from compatlab.src.profile.docker_cli import DockerError
 from compatlab.src.profile.loader import load_profile_file
 from compatlab.src.profile.models import (
     LibraryFact,
@@ -51,6 +52,17 @@ def _system_facts() -> SystemFacts:
             glibcxx=["3.4.33"],
             cxxabi=["1.3.15"],
         ),
+    )
+
+
+def _docker_facts() -> SystemFacts:
+    facts = _system_facts()
+    return facts.model_copy(
+        update={
+            "source_image": "ubuntu:22.04",
+            "source_image_id": "sha256:abc",
+            "platform": "linux/amd64",
+        }
     )
 
 
@@ -193,6 +205,40 @@ def test_profiles_detect_writes_raw_facts_json(
     assert "System profile detected" in result.output
 
 
+def test_profiles_detect_from_image_writes_raw_facts_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "system-facts.json"
+
+    def fake_detect(image: str, **kwargs: object) -> SystemFacts:
+        assert image == "ubuntu:22.04"
+        assert kwargs["platform"] == "linux/amd64"
+        assert kwargs["pull"] is True
+        return _docker_facts()
+
+    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "detect",
+            "--from-image",
+            "ubuntu:22.04",
+            "--platform",
+            "linux/amd64",
+            "--pull",
+            "--json",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["source_image"] == "ubuntu:22.04"
+    assert raw["platform"] == "linux/amd64"
+
+
 def test_profiles_generate_writes_loadable_yaml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -212,6 +258,90 @@ def test_profiles_generate_writes_loadable_yaml(
     loaded = load_profile_file(output)
     assert loaded.id == "local"
     assert loaded.metadata is not None
+
+
+def test_profiles_generate_from_image_writes_loadable_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "ubuntu-2204.yaml"
+
+    def fake_detect(image: str, **kwargs: object) -> SystemFacts:
+        assert image == "ubuntu:22.04"
+        assert kwargs["platform"] == "linux/amd64"
+        assert kwargs["pull"] is True
+        return _docker_facts()
+
+    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "generate",
+            "--from-image",
+            "ubuntu:22.04",
+            "--platform",
+            "linux/amd64",
+            "--pull",
+            "--name",
+            "ubuntu-2204-docker",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Docker image profile generated" in result.output
+    loaded = load_profile_file(output)
+    assert loaded.id == "ubuntu-2204-docker"
+    assert loaded.metadata is not None
+    assert loaded.metadata.source == "docker-image"
+    assert loaded.metadata.source_image == "ubuntu:22.04"
+    assert loaded.metadata.platform == "linux/amd64"
+
+
+def test_profiles_generate_rejects_multiple_sources(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "generate",
+            "--from-current",
+            "--from-image",
+            "ubuntu:22.04",
+            "--output",
+            str(tmp_path / "local.yaml"),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Provide exactly one" in result.output
+
+
+def test_profiles_generate_from_image_reports_docker_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_detect(image: str, **kwargs: object) -> SystemFacts:
+        raise DockerError("Docker is not available.")
+
+    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "generate",
+            "--from-image",
+            "ubuntu:22.04",
+            "--name",
+            "ubuntu-2204-docker",
+            "--output",
+            str(tmp_path / "ubuntu-2204.yaml"),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Docker is not available" in result.output
 
 
 def test_profiles_validate_accepts_valid_profile(tmp_path: Path) -> None:

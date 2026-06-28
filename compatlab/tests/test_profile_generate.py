@@ -48,3 +48,31 @@ def test_generate_target_profile_from_facts_maps_detected_values() -> None:
     assert profile.metadata is not None
     assert profile.metadata.generated_at == "2026-06-28T12:00:00Z"
     assert profile.metadata.source_os_id == "ubuntu"
+
+
+def test_generate_target_profile_from_docker_facts_includes_image_metadata() -> None:
+    facts = SystemFacts(
+        os_release=OsReleaseFacts(id="ubuntu", version_id="22.04", pretty_name="Ubuntu 22.04 LTS"),
+        architecture="x86_64",
+        source_image="ubuntu:22.04",
+        source_image_id="sha256:abc",
+        platform="linux/amd64",
+        dynamic_linkers=["/lib64/ld-linux-x86-64.so.2"],
+        libraries=[LibraryFact(soname="libc.so.6", path="/lib/libc.so.6")],
+        symbol_versions=SymbolVersionFacts(glibc=["2.35"]),
+    )
+
+    profile = generate_target_profile_from_facts(
+        facts,
+        name="ubuntu-2204-docker",
+        generated_at=datetime(2026, 6, 28, 12, 0, tzinfo=UTC),
+    )
+
+    assert profile.id == "ubuntu-2204-docker"
+    assert profile.libc.version == "2.35"
+    assert profile.metadata is not None
+    assert profile.metadata.source == "docker-image"
+    assert profile.metadata.source_image == "ubuntu:22.04"
+    assert profile.metadata.source_image_id == "sha256:abc"
+    assert profile.metadata.detection_backend == "docker-rootfs-export"
+    assert profile.metadata.platform == "linux/amd64"

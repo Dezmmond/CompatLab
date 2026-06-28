@@ -30,6 +30,7 @@ def normalize_architecture(value: str | None) -> str | None:
     normalized = " ".join(normalized.split())
     aliases = {
         "advanced micro devices x86_64": "x86_64",
+        "amd64": "x86_64",
         "amd x86_64": "x86_64",
         "x86_64": "x86_64",
         "x64": "x86_64",
