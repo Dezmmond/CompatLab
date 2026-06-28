@@ -16,8 +16,10 @@ profile generation from the current system or Docker image rootfs exports.
 
 ```bash
 compatlab scan ./app
+compatlab scan ./dist/my-app --bundle-root ./dist --recursive
 compatlab compare ./app --target ubuntu-1804
 compatlab compare ./app --target-file ./local.yaml
+compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive
 compatlab profiles list
 compatlab profiles show ubuntu-1804
 compatlab profiles detect
@@ -33,6 +35,7 @@ JSON report output is wired for scan and compare:
 ```bash
 compatlab scan ./app --json report.json
 compatlab compare ./app --target ubuntu-1804 --json report.json
+compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --json report.json
 compatlab profiles detect --json system-facts.json
 compatlab profiles detect --from-image ubuntu:22.04 --json image-facts.json
 compatlab profiles detect --from-image ubuntu:22.04 --runtime-preset cpp-runtime --json runtime-facts.json
@@ -94,11 +97,37 @@ Built-in v0.6 presets:
 Runtime preset installation currently supports `apt-get`, `dnf`, and `yum`
 based images.
 
+## Bundle Dependency Resolution
+
+CompatLab can resolve local shared-library dependencies inside an application
+bundle. Use `--bundle-root` to point at the directory being shipped and
+`--recursive` to follow transitive `DT_NEEDED` dependencies:
+
+```bash
+uv run compatlab compare ./dist/my-app \
+  --target-file /tmp/ubuntu-2204-cpp-runtime.yaml \
+  --bundle-root ./dist \
+  --recursive
+```
+
+The resolver checks `RUNPATH`, `RPATH`, common bundle library directories such
+as `lib/` and `lib64/`, and `$ORIGIN`-relative layouts. The terminal report
+shows whether each dependency comes from the bundle, the target profile, or is
+missing/ambiguous. JSON reports include a `dependency_graph` with nodes, edges,
+resolution kind, candidates, and unresolved dependencies.
+
+Conservative limits are available for large bundles:
+
+```bash
+uv run compatlab scan ./dist/my-app --bundle-root ./dist --recursive --max-depth 10 --max-files 500
+```
+
 ## MVP Scope
 
 The first MVP is intentionally narrow:
 
 - one ELF binary or shared library as input;
+- optional local bundle root with recursive ELF dependency resolution;
 - one target profile in YAML;
 - pretty terminal output with Rich;
 - JSON reports based on Pydantic models;
