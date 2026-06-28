@@ -11,6 +11,8 @@ from .compare.engine import compare_report
 from .elfscan.scanner import scan_path
 from .problem.models import Problem
 from .profile.detect import detect_current_system
+from .profile.docker_cli import DockerError
+from .profile.docker_image import detect_docker_image_system
 from .profile.generate import generate_target_profile_from_facts
 from .profile.loader import (
     ProfileLoadError,
@@ -133,13 +135,32 @@ def profiles_show(
 
 @profiles_app.command("detect")
 def profiles_detect(
+    from_image: Annotated[
+        str | None,
+        typer.Option("--from-image", help="Detect raw facts from a Docker image."),
+    ] = None,
+    platform: Annotated[
+        str | None,
+        typer.Option("--platform", help="Docker image platform, for example linux/amd64."),
+    ] = None,
+    pull: Annotated[
+        bool, typer.Option("--pull", help="Pull Docker image before detection.")
+    ] = False,
     json_output: Annotated[
         Path | None,
         typer.Option("--json", help="Write raw detected system facts as JSON."),
     ] = None,
 ) -> None:
     """Detect raw facts from the current Linux system."""
-    facts = detect_current_system()
+    try:
+        facts = (
+            detect_docker_image_system(from_image, platform=platform, pull=pull)
+            if from_image is not None
+            else detect_current_system()
+        )
+    except DockerError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        raise typer.Exit(2) from exc
     if json_output is not None:
         _write_system_facts_json(facts, json_output)
     _render_system_facts(facts)
@@ -151,26 +172,54 @@ def profiles_generate(
         bool,
         typer.Option("--from-current", help="Generate from the current Linux system."),
     ] = False,
+    from_image: Annotated[
+        str | None,
+        typer.Option("--from-image", help="Generate from a Docker image."),
+    ] = None,
+    platform: Annotated[
+        str | None,
+        typer.Option("--platform", help="Docker image platform, for example linux/amd64."),
+    ] = None,
+    pull: Annotated[
+        bool, typer.Option("--pull", help="Pull Docker image before generation.")
+    ] = False,
     name: Annotated[str, typer.Option("--name", help="Generated target profile id.")] = "local",
     output: Annotated[
         Path | None, typer.Option("--output", help="Output YAML profile path.")
     ] = None,
 ) -> None:
     """Generate a YAML target profile."""
-    if not from_current:
-        console.print("[red]Only --from-current is supported in v0.4.[/red]")
+    if from_current == (from_image is not None):
+        console.print("[red]Provide exactly one of --from-current or --from-image.[/red]")
         raise typer.Exit(2)
     if output is None:
         console.print("[red]--output is required.[/red]")
         raise typer.Exit(2)
 
-    facts = detect_current_system()
+    try:
+        facts = (
+            detect_docker_image_system(from_image, platform=platform, pull=pull)
+            if from_image is not None
+            else detect_current_system()
+        )
+    except DockerError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        raise typer.Exit(2) from exc
+
     profile = generate_target_profile_from_facts(facts, name=name)
     _write_target_profile_yaml(profile, output)
-    console.print(f"[bold]Profile:[/bold] {output}")
-    console.print("[bold]Status:[/bold] generated")
-    console.print(f"[bold]Target:[/bold] {profile.id}")
-    console.print(f"[bold]Architecture:[/bold] {profile.arch}")
+    if from_image is not None:
+        console.print("[bold]Docker image profile generated[/bold]")
+        console.print(f"[bold]Image:[/bold] {from_image}")
+        console.print(f"[bold]Name:[/bold] {profile.id}")
+        console.print(f"[bold]Architecture:[/bold] {profile.arch}")
+        console.print(f"[bold]OS:[/bold] {profile.name}")
+        console.print(f"[bold]Output:[/bold] {output}")
+    else:
+        console.print(f"[bold]Profile:[/bold] {output}")
+        console.print("[bold]Status:[/bold] generated")
+        console.print(f"[bold]Target:[/bold] {profile.id}")
+        console.print(f"[bold]Architecture:[/bold] {profile.arch}")
 
 
 @profiles_app.command("validate")
