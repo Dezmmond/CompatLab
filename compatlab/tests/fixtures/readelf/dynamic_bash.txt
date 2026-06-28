@@ -1,0 +1,8 @@
+
+Dynamic section at offset 0x13ba30 contains 27 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libtinfo.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN/../lib]
+ 0x000000000000000f (RPATH)              Library rpath: [/opt/vendor/lib]
+ 0x000000000000000c (INIT)               0x2d000
