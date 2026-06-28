@@ -88,6 +88,7 @@ def resolve_bundle_dependencies(
             report = scan_path(artifact_path)
             reports[artifact_id] = report
             nodes[artifact_id] = _node_from_report(artifact_id, report)
+            warnings.extend(_runtime_path_warnings(artifact_path, bundle_root, report))
         report = reports[artifact_id]
         if report.elf is None:
             continue
@@ -249,6 +250,40 @@ def _expanded_search_dirs(values: list[str], requester_path: Path) -> list[Path]
             expanded = part.replace("$ORIGIN", str(origin)).replace("${ORIGIN}", str(origin))
             dirs.append(Path(expanded).resolve())
     return dirs
+
+
+def _runtime_path_warnings(
+    artifact_path: Path, bundle_root: Path, report: ArtifactReport
+) -> list[Problem]:
+    if report.elf is None:
+        return []
+    warnings: list[Problem] = []
+    for field in ("rpath", "runpath"):
+        for value in getattr(report.elf, field):
+            for part in value.split(":"):
+                if not part:
+                    continue
+                if "$" in part and "$ORIGIN" not in part and "${ORIGIN}" not in part:
+                    warnings.append(
+                        _resolver_warning(
+                            artifact_path,
+                            "bundle.rpath_unresolved_token",
+                            f"{field.upper()} entry {part} contains an unsupported token.",
+                        )
+                    )
+                if "$ORIGIN" in part or "${ORIGIN}" in part:
+                    expanded = part.replace("$ORIGIN", str(artifact_path.parent)).replace(
+                        "${ORIGIN}", str(artifact_path.parent)
+                    )
+                    if not _is_inside(Path(expanded).resolve(), bundle_root):
+                        warnings.append(
+                            _resolver_warning(
+                                artifact_path,
+                                "bundle.rpath_escapes_bundle",
+                                f"{field.upper()} entry {part} escapes the bundle root.",
+                            )
+                        )
+    return warnings
 
 
 def _node_from_report(artifact_id: str, report: ArtifactReport) -> DependencyNode:
