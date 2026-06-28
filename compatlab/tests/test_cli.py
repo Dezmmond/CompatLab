@@ -49,15 +49,16 @@ def test_scan_command_smoke_scans_bin_bash() -> None:
     assert "Compatibility:" not in result.output
 
 
-def test_compare_command_loads_builtin_profile(tmp_path: Path) -> None:
+def test_compare_command_returns_scan_error_for_non_elf(tmp_path: Path) -> None:
     artifact = tmp_path / "demo-app"
     artifact.write_bytes(b"not really elf yet")
 
     result = runner.invoke(app, ["compare", str(artifact), "--target", "ubuntu-1804"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 2
     assert "Target:" in result.output
     assert "Ubuntu 18.04" in result.output
+    assert "scan.failed" in result.output
 
 
 def test_profiles_list_outputs_builtin_profiles() -> None:

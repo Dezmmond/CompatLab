@@ -7,6 +7,7 @@ from rich.console import Console
 from . import __version__
 from .compare.engine import compare_report
 from .elfscan.scanner import scan_path
+from .problem.models import Problem
 from .profile.loader import (
     ProfileNotFoundError,
     list_builtin_profiles,
@@ -62,7 +63,29 @@ def compare(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
 
-    report = compare_report(scan_path(path), profile)
+    scan_report = scan_path(path)
+    if scan_report.elf is None or scan_report.elf.elf_class is None:
+        report = scan_report.model_copy(
+            update={
+                "target": profile,
+                "problems": [
+                    *scan_report.problems,
+                    Problem(
+                        id="scan.failed",
+                        severity="HIGH",
+                        title="Artifact could not be scanned as ELF",
+                        details="readelf did not return a parseable ELF header.",
+                        artifact_path=str(path),
+                    ),
+                ],
+            }
+        )
+        if json_output is not None:
+            write_json_report(report, json_output)
+        render_report(report, console)
+        raise typer.Exit(2)
+
+    report = compare_report(scan_report, profile)
     if json_output is not None:
         write_json_report(report, json_output)
     render_report(report, console)

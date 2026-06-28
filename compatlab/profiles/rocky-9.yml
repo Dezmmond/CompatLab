@@ -11,6 +11,7 @@ interpreters:
   - /lib64/ld-linux-x86-64.so.2
 provided_libraries:
   - soname: libc.so.6
+  - soname: libtinfo.so.6
   - soname: libstdc++.so.6
   - soname: libgcc_s.so.1
   - soname: libm.so.6
