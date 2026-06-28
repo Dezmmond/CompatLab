@@ -33,6 +33,9 @@ class SystemFacts(BaseModel):
     source_image: str | None = None
     source_image_id: str | None = None
     platform: str | None = None
+    runtime_preset: str | None = None
+    runtime_packages: list[str] | None = None
+    package_manager: str | None = None
     dynamic_linkers: list[str] = Field(default_factory=list)
     library_paths: list[str] = Field(default_factory=list)
     libraries: list[LibraryFact] = Field(default_factory=list)
@@ -51,6 +54,9 @@ class ProfileMetadata(BaseModel):
     source_os_version_id: str | None = None
     detection_backend: str | None = None
     platform: str | None = None
+    runtime_preset: str | None = None
+    runtime_packages: list[str] | None = None
+    package_manager: str | None = None
 
 
 class LibcProfile(BaseModel):

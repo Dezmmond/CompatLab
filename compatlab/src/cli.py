@@ -22,12 +22,20 @@ from .profile.loader import (
     load_target_profile,
 )
 from .profile.models import SystemFacts, TargetProfile
+from .profile.runtime_presets import (
+    RuntimePreset,
+    RuntimePresetError,
+    get_runtime_preset,
+    list_runtime_presets,
+)
 from .report.json import write_json_report
 from .report.pretty import render_profiles, render_report
 
 app = typer.Typer(help="Preflight compatibility checker for Linux binary artifacts.")
 profiles_app = typer.Typer(help="Inspect built-in target profiles.")
+runtime_presets_app = typer.Typer(help="Inspect built-in Docker runtime presets.")
 app.add_typer(profiles_app, name="profiles")
+profiles_app.add_typer(runtime_presets_app, name="runtime-presets")
 console = Console()
 
 
@@ -133,6 +141,27 @@ def profiles_show(
     console.print_json(profile.model_dump_json(indent=2))
 
 
+@runtime_presets_app.command("list")
+def runtime_presets_list() -> None:
+    """List built-in Docker runtime presets."""
+    console.print("[bold]Available runtime presets:[/bold]")
+    for preset in list_runtime_presets():
+        console.print(f"{preset.name:18} {preset.description}")
+
+
+@runtime_presets_app.command("show")
+def runtime_presets_show(
+    name: Annotated[str, typer.Argument(help="Runtime preset name.")],
+) -> None:
+    """Show one Docker runtime preset."""
+    try:
+        preset = get_runtime_preset(name)
+    except RuntimePresetError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        raise typer.Exit(2) from exc
+    _render_runtime_preset(preset)
+
+
 @profiles_app.command("detect")
 def profiles_detect(
     from_image: Annotated[
@@ -146,19 +175,33 @@ def profiles_detect(
     pull: Annotated[
         bool, typer.Option("--pull", help="Pull Docker image before detection.")
     ] = False,
+    runtime_preset: Annotated[
+        str | None,
+        typer.Option(
+            "--runtime-preset", help="Install a built-in runtime preset before detection."
+        ),
+    ] = None,
     json_output: Annotated[
         Path | None,
         typer.Option("--json", help="Write raw detected system facts as JSON."),
     ] = None,
 ) -> None:
     """Detect raw facts from the current Linux system."""
+    if runtime_preset is not None and from_image is None:
+        console.print("[red]--runtime-preset is valid only with --from-image.[/red]")
+        raise typer.Exit(2)
     try:
         facts = (
-            detect_docker_image_system(from_image, platform=platform, pull=pull)
+            detect_docker_image_system(
+                from_image,
+                platform=platform,
+                pull=pull,
+                runtime_preset=runtime_preset,
+            )
             if from_image is not None
             else detect_current_system()
         )
-    except DockerError as exc:
+    except (DockerError, RuntimePresetError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
         raise typer.Exit(2) from exc
     if json_output is not None:
@@ -183,6 +226,12 @@ def profiles_generate(
     pull: Annotated[
         bool, typer.Option("--pull", help="Pull Docker image before generation.")
     ] = False,
+    runtime_preset: Annotated[
+        str | None,
+        typer.Option(
+            "--runtime-preset", help="Install a built-in runtime preset before generation."
+        ),
+    ] = None,
     name: Annotated[str, typer.Option("--name", help="Generated target profile id.")] = "local",
     output: Annotated[
         Path | None, typer.Option("--output", help="Output YAML profile path.")
@@ -192,17 +241,25 @@ def profiles_generate(
     if from_current == (from_image is not None):
         console.print("[red]Provide exactly one of --from-current or --from-image.[/red]")
         raise typer.Exit(2)
+    if runtime_preset is not None and from_image is None:
+        console.print("[red]--runtime-preset is valid only with --from-image.[/red]")
+        raise typer.Exit(2)
     if output is None:
         console.print("[red]--output is required.[/red]")
         raise typer.Exit(2)
 
     try:
         facts = (
-            detect_docker_image_system(from_image, platform=platform, pull=pull)
+            detect_docker_image_system(
+                from_image,
+                platform=platform,
+                pull=pull,
+                runtime_preset=runtime_preset,
+            )
             if from_image is not None
             else detect_current_system()
         )
-    except DockerError as exc:
+    except (DockerError, RuntimePresetError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
         raise typer.Exit(2) from exc
 
@@ -211,6 +268,8 @@ def profiles_generate(
     if from_image is not None:
         console.print("[bold]Docker image profile generated[/bold]")
         console.print(f"[bold]Image:[/bold] {from_image}")
+        if runtime_preset is not None:
+            console.print(f"[bold]Runtime preset:[/bold] {runtime_preset}")
         console.print(f"[bold]Name:[/bold] {profile.id}")
         console.print(f"[bold]Architecture:[/bold] {profile.arch}")
         console.print(f"[bold]OS:[/bold] {profile.name}")
@@ -290,6 +349,20 @@ def _render_system_facts(facts: SystemFacts) -> None:
     console.print(f"[bold]Interpreters:[/bold] {len(facts.dynamic_linkers)}")
     console.print(f"[bold]Libraries:[/bold] {len(facts.libraries)}")
     console.print(f"[bold]Warnings:[/bold] {len(facts.warnings)}")
+
+
+def _render_runtime_preset(preset: RuntimePreset) -> None:
+    console.print(f"[bold]Runtime preset:[/bold] {preset.name}")
+    console.print(f"[bold]Description:[/bold] {preset.description}")
+    console.print(f"[bold]Package managers:[/bold] {', '.join(preset.supported_package_managers)}")
+    console.print("[bold]Packages:[/bold]")
+    for manager in preset.supported_package_managers:
+        packages = preset.packages_by_manager.get(manager, [])
+        console.print(f"  {manager}: {', '.join(packages)}")
+    if preset.limitations:
+        console.print("[bold]Limitations:[/bold]")
+        for limitation in preset.limitations:
+            console.print(f"  {limitation}")
 
 
 def _last_or_unknown(values: list[str]) -> str:

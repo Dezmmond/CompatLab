@@ -89,6 +89,90 @@ def test_export_image_rootfs_removes_container_when_export_fails(tmp_path: Path)
     assert runner.commands[-1] == ["docker", "rm", "-f", "container-123"]
 
 
+def test_export_runtime_rootfs_builds_expected_docker_commands(tmp_path: Path) -> None:
+    runner = FakeRunner(
+        [
+            _result(["docker"], stdout="[]"),
+            _result(["docker"], stdout="container-123\n"),
+            _result(["docker"]),
+            _result(["docker"]),
+            _result(["docker"]),
+        ]
+    )
+    client = DockerClient(timeout=12.0, runner=runner)
+    install_script = "apt-get update\napt-get install -y libstdc++6"
+
+    client.export_runtime_rootfs(
+        "ubuntu:22.04",
+        tmp_path / "rootfs.tar",
+        install_script,
+        platform="linux/amd64",
+    )
+
+    assert runner.commands == [
+        ["docker", "image", "inspect", "ubuntu:22.04"],
+        [
+            "docker",
+            "create",
+            "--platform",
+            "linux/amd64",
+            "ubuntu:22.04",
+            "sh",
+            "-c",
+            install_script,
+        ],
+        ["docker", "start", "--attach", "container-123"],
+        ["docker", "export", "container-123", "--output", str(tmp_path / "rootfs.tar")],
+        ["docker", "rm", "-f", "container-123"],
+    ]
+
+
+def test_export_runtime_rootfs_pulls_when_requested(tmp_path: Path) -> None:
+    runner = FakeRunner(
+        [
+            _result(["docker"], stdout="pulled"),
+            _result(["docker"], stdout="container-123\n"),
+            _result(["docker"]),
+            _result(["docker"]),
+            _result(["docker"]),
+        ]
+    )
+    client = DockerClient(runner=runner)
+
+    client.export_runtime_rootfs(
+        "ubuntu:22.04",
+        tmp_path / "rootfs.tar",
+        "true",
+        pull=True,
+        platform="linux/amd64",
+    )
+
+    assert runner.commands[0] == [
+        "docker",
+        "pull",
+        "--platform",
+        "linux/amd64",
+        "ubuntu:22.04",
+    ]
+
+
+def test_export_runtime_rootfs_removes_container_when_install_fails(tmp_path: Path) -> None:
+    runner = FakeRunner(
+        [
+            _result(["docker"], stdout="[]"),
+            _result(["docker"], stdout="container-123\n"),
+            _result(["docker"], returncode=1, stderr="install failed"),
+            _result(["docker"]),
+        ]
+    )
+    client = DockerClient(runner=runner)
+
+    with pytest.raises(DockerError, match="Package installation failed"):
+        client.export_runtime_rootfs("ubuntu:22.04", tmp_path / "rootfs.tar", "false")
+
+    assert runner.commands[-1] == ["docker", "rm", "-f", "container-123"]
+
+
 def test_missing_docker_raises_clear_error(tmp_path: Path) -> None:
     runner = FakeRunner(
         [

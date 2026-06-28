@@ -13,6 +13,12 @@ from compatlab.src.profile.rootfs_tar import (
     list_symbol_library_candidates,
     parse_os_release_from_tar,
 )
+from compatlab.src.profile.runtime_presets import (
+    build_install_script,
+    detect_package_manager_from_rootfs,
+    get_runtime_preset,
+    packages_for_manager,
+)
 
 
 def detect_docker_image_system(
@@ -20,6 +26,7 @@ def detect_docker_image_system(
     *,
     platform: str | None = None,
     pull: bool = False,
+    runtime_preset: str | None = None,
     timeout: float = 30.0,
     client: DockerClient | None = None,
 ) -> SystemFacts:
@@ -27,12 +34,33 @@ def detect_docker_image_system(
     metadata = docker.inspect_image_metadata(image)
     with TemporaryDirectory(prefix="compatlab-rootfs-") as temp_dir:
         rootfs = Path(temp_dir) / "rootfs.tar"
-        docker.export_image_rootfs(image, rootfs, platform=platform, pull=pull)
+        runtime_packages: list[str] = []
+        package_manager: str | None = None
+
+        if runtime_preset is None:
+            docker.export_image_rootfs(image, rootfs, platform=platform, pull=pull)
+        else:
+            base_rootfs = Path(temp_dir) / "base-rootfs.tar"
+            docker.export_image_rootfs(image, base_rootfs, platform=platform, pull=pull)
+            preset = get_runtime_preset(runtime_preset)
+            package_manager = detect_package_manager_from_rootfs(str(base_rootfs))
+            runtime_packages = packages_for_manager(preset, package_manager)
+            install_script = build_install_script(package_manager, runtime_packages)
+            docker.export_runtime_rootfs(
+                image,
+                rootfs,
+                install_script,
+                platform=platform,
+            )
+
         return system_facts_from_rootfs_tar(
             rootfs,
             image=image,
             metadata=metadata,
             platform=platform,
+            runtime_preset=runtime_preset,
+            runtime_packages=runtime_packages,
+            package_manager=package_manager,
         )
 
 
@@ -42,6 +70,9 @@ def system_facts_from_rootfs_tar(
     image: str,
     metadata: DockerImageMetadata,
     platform: str | None = None,
+    runtime_preset: str | None = None,
+    runtime_packages: list[str] | None = None,
+    package_manager: str | None = None,
 ) -> SystemFacts:
     warnings: list[FactWarning] = []
     libraries = list_libraries(str(rootfs))
@@ -54,13 +85,27 @@ def system_facts_from_rootfs_tar(
         source_image=image,
         source_image_id=metadata.image_id,
         platform=platform,
+        runtime_preset=runtime_preset,
+        runtime_packages=runtime_packages or [],
+        package_manager=package_manager,
         dynamic_linkers=dynamic_linkers,
         library_paths=sorted({library.path for library in libraries if library.path is not None}),
         libraries=libraries,
         symbol_versions=symbol_versions,
-        detected_by=["docker image inspect", "docker export", "rootfs tar parser"],
+        detected_by=_detected_by(runtime_preset),
         warnings=warnings,
     )
+
+
+def _detected_by(runtime_preset: str | None) -> list[str]:
+    if runtime_preset is None:
+        return ["docker image inspect", "docker export", "rootfs tar parser"]
+    return [
+        "docker image inspect",
+        "docker export",
+        "runtime preset install",
+        "rootfs tar parser",
+    ]
 
 
 def _detect_symbol_versions_from_rootfs(
