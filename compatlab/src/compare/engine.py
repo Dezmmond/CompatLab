@@ -44,7 +44,12 @@ def normalize_architecture(value: str | None) -> str | None:
     return aliases.get(normalized, normalized)
 
 
-def compare_report(report: ArtifactReport, target: TargetProfile) -> ArtifactReport:
+def compare_report(
+    report: ArtifactReport,
+    target: TargetProfile,
+    *,
+    assumed_provided_libraries: set[str] | None = None,
+) -> ArtifactReport:
     problems: list[Problem] = list(report.problems)
     warnings: list[Problem] = list(report.warnings)
     if report.elf is None:
@@ -57,7 +62,7 @@ def compare_report(report: ArtifactReport, target: TargetProfile) -> ArtifactRep
     problems.extend(_check_glibc(report, target))
     problems.extend(_check_glibcxx(report, target))
     problems.extend(_check_cxxabi(report, target))
-    problems.extend(_check_libraries(report, target))
+    problems.extend(_check_libraries(report, target, assumed_provided_libraries or set()))
     warnings.extend(_check_search_paths(report, "rpath"))
     warnings.extend(_check_search_paths(report, "runpath"))
 
@@ -210,13 +215,15 @@ def _check_cxxabi(report: ArtifactReport, target: TargetProfile) -> list[Problem
     ]
 
 
-def _check_libraries(report: ArtifactReport, target: TargetProfile) -> list[Problem]:
+def _check_libraries(
+    report: ArtifactReport, target: TargetProfile, assumed_provided_libraries: set[str]
+) -> list[Problem]:
     if report.elf is None:
         return []
     provided = {library.soname for library in target.provided_libraries}
     problems = []
     for library in report.elf.needed:
-        if library in provided:
+        if library in provided or library in assumed_provided_libraries:
             continue
         problems.append(
             _problem(

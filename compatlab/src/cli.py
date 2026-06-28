@@ -7,6 +7,13 @@ from rich.console import Console
 import yaml
 
 from . import __version__
+from .bundle.models import DependencyGraph, DependencyResolutionKind
+from .bundle.resolver import (
+    DEFAULT_MAX_DEPTH,
+    DEFAULT_MAX_FILES,
+    BundleResolutionError,
+    resolve_bundle_dependencies,
+)
 from .compare.engine import compare_report
 from .elfscan.scanner import scan_path
 from .problem.models import Problem
@@ -58,10 +65,41 @@ def main(
 @app.command()
 def scan(
     path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
+    bundle_root: Annotated[
+        Path | None,
+        typer.Option("--bundle-root", exists=True, file_okay=False, dir_okay=True),
+    ] = None,
+    recursive: Annotated[
+        bool, typer.Option("--recursive", help="Resolve transitive bundled ELF dependencies.")
+    ] = False,
+    max_depth: Annotated[
+        int, typer.Option("--max-depth", help="Maximum recursive dependency depth.")
+    ] = DEFAULT_MAX_DEPTH,
+    max_files: Annotated[
+        int, typer.Option("--max-files", help="Maximum files to index under bundle root.")
+    ] = DEFAULT_MAX_FILES,
     json_output: Annotated[Path | None, typer.Option("--json", help="Write JSON report.")] = None,
 ) -> None:
     """Scan one Linux artifact and print a structured stub report."""
     report = scan_path(path)
+    if bundle_root is not None:
+        try:
+            resolution = resolve_bundle_dependencies(
+                path,
+                bundle_root,
+                recursive=recursive,
+                max_depth=max_depth,
+                max_files=max_files,
+            )
+        except BundleResolutionError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        report = report.model_copy(
+            update={
+                "dependency_graph": resolution.graph,
+                "warnings": [*report.warnings, *resolution.warnings],
+            }
+        )
     if json_output is not None:
         write_json_report(report, json_output)
     render_report(report, console)
@@ -75,6 +113,19 @@ def compare(
         Path | None,
         typer.Option("--target-file", help="External YAML target profile."),
     ] = None,
+    bundle_root: Annotated[
+        Path | None,
+        typer.Option("--bundle-root", exists=True, file_okay=False, dir_okay=True),
+    ] = None,
+    recursive: Annotated[
+        bool, typer.Option("--recursive", help="Resolve transitive bundled ELF dependencies.")
+    ] = False,
+    max_depth: Annotated[
+        int, typer.Option("--max-depth", help="Maximum recursive dependency depth.")
+    ] = DEFAULT_MAX_DEPTH,
+    max_files: Annotated[
+        int, typer.Option("--max-files", help="Maximum files to index under bundle root.")
+    ] = DEFAULT_MAX_FILES,
     json_output: Annotated[Path | None, typer.Option("--json", help="Write JSON report.")] = None,
 ) -> None:
     """Compare one Linux artifact with a target profile."""
@@ -114,12 +165,76 @@ def compare(
         render_report(report, console)
         raise typer.Exit(2)
 
-    report = compare_report(scan_report, profile)
+    if bundle_root is not None:
+        try:
+            resolution = resolve_bundle_dependencies(
+                path,
+                bundle_root,
+                target=profile,
+                recursive=recursive,
+                max_depth=max_depth,
+                max_files=max_files,
+            )
+        except BundleResolutionError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        bundled_libraries = resolution.bundled_library_names
+        report = compare_report(
+            scan_report,
+            profile,
+            assumed_provided_libraries=bundled_libraries,
+        )
+        problems = [*report.problems, *_dependency_problems(resolution.graph)]
+        warnings = [*report.warnings, *resolution.warnings]
+        for artifact_id, artifact_report in resolution.reports.items():
+            if artifact_id == resolution.graph.entrypoint_artifact_id:
+                continue
+            compared = compare_report(
+                artifact_report,
+                profile,
+                assumed_provided_libraries=bundled_libraries,
+            )
+            problems.extend(compared.problems)
+            warnings.extend(compared.warnings)
+        report = report.model_copy(
+            update={
+                "dependency_graph": resolution.graph,
+                "problems": problems,
+                "warnings": warnings,
+            }
+        )
+    else:
+        report = compare_report(scan_report, profile)
     if json_output is not None:
         write_json_report(report, json_output)
     render_report(report, console)
     if not report.is_compatible:
         raise typer.Exit(1)
+
+
+def _dependency_problems(graph: DependencyGraph) -> list[Problem]:
+    problems: list[Problem] = []
+    for edge in graph.unresolved_dependencies:
+        severity = "HIGH"
+        title = "Dependency could not be resolved"
+        if edge.resolution_kind == DependencyResolutionKind.AMBIGUOUS:
+            severity = "HIGH"
+            title = "Dependency resolution is ambiguous"
+        problems.append(
+            Problem(
+                id=f"bundle.dependency_{edge.resolution_kind.value}",
+                severity=severity,
+                title=title,
+                details=edge.message or f"{edge.needed_name} could not be resolved.",
+                artifact_path=edge.from_artifact_id,
+                evidence={
+                    "from_artifact_id": edge.from_artifact_id,
+                    "needed": edge.needed_name,
+                    "candidates": ", ".join(edge.candidates),
+                },
+            )
+        )
+    return problems
 
 
 @profiles_app.command("list")

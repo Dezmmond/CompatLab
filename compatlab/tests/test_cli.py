@@ -6,6 +6,8 @@ import pytest
 from typer.testing import CliRunner
 
 from compatlab.src.cli import app
+from compatlab.src.bundle.models import DependencyEdge, DependencyGraph, DependencyResolutionKind
+from compatlab.src.bundle.resolver import BundleResolutionResult
 from compatlab.src.profile.docker_cli import DockerError
 from compatlab.src.profile.loader import load_profile_file
 from compatlab.src.profile.models import (
@@ -101,6 +103,49 @@ def test_scan_command_writes_json_report(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert report.exists()
     assert '"tool": "compatlab"' in report.read_text(encoding="utf-8")
+
+
+def test_scan_command_writes_bundle_dependency_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = tmp_path / "dist"
+    artifact = bundle / "demo-app"
+    bundle.mkdir()
+    artifact.write_bytes(b"not really elf yet")
+    output = tmp_path / "report.json"
+    graph = DependencyGraph(
+        entrypoint_artifact_id="demo-app",
+        edges=[
+            DependencyEdge(
+                from_artifact_id="demo-app",
+                needed_name="libfoo.so",
+                resolution_kind=DependencyResolutionKind.MISSING,
+            )
+        ],
+    )
+
+    monkeypatch.setattr(
+        "compatlab.src.cli.resolve_bundle_dependencies",
+        lambda *args, **kwargs: BundleResolutionResult(graph=graph, reports={}, warnings=[]),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "scan",
+            str(artifact),
+            "--bundle-root",
+            str(bundle),
+            "--recursive",
+            "--json",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["dependency_graph"]["edges"][0]["resolution_kind"] == "missing"
+    assert "Dependency Resolution" in result.output
 
 
 def test_scan_command_smoke_scans_bin_bash() -> None:

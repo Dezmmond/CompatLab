@@ -151,6 +151,19 @@ def test_library_not_provided_rule() -> None:
     assert "profile.library_not_provided" in _problem_ids(compared)
 
 
+def test_library_rule_accepts_assumed_bundled_libraries() -> None:
+    report = _report(
+        ElfInfo(
+            machine="Advanced Micro Devices X86-64",
+            needed=["libbundled.so"],
+        )
+    )
+
+    compared = compare_report(report, _profile(), assumed_provided_libraries={"libbundled.so"})
+
+    assert "profile.library_not_provided" not in _problem_ids(compared)
+
+
 def test_suspicious_rpath_and_runpath_rules_are_warnings() -> None:
     report = _report(
         ElfInfo(

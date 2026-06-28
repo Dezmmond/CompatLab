@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from compatlab.src.bundle.models import DependencyGraph
 from compatlab.src.elfscan.models import ElfInfo
 from compatlab.src.problem.models import Problem
 from compatlab.src.profile.models import TargetProfile
@@ -18,6 +19,7 @@ class ArtifactReport(BaseModel):
     artifact: ArtifactInfo
     elf: ElfInfo | None = None
     target: TargetProfile | None = None
+    dependency_graph: DependencyGraph | None = None
     problems: list[Problem] = Field(default_factory=list)
     warnings: list[Problem] = Field(default_factory=list)
 
