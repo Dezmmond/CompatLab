@@ -37,10 +37,15 @@ def generate_target_profile_from_facts(
         metadata=ProfileMetadata(
             generated_by="compatlab",
             generated_at=timestamp.isoformat().replace("+00:00", "Z"),
-            source="current-system",
+            source="docker-image" if facts.source_image is not None else "current-system",
+            source_image=facts.source_image,
+            source_image_id=facts.source_image_id,
             source_os_id=facts.os_release.id,
             source_os_version_id=facts.os_release.version_id,
-            detection_backend="local-system",
+            detection_backend=(
+                "docker-rootfs-export" if facts.source_image is not None else "local-system"
+            ),
+            platform=facts.platform,
         ),
         notes="Generated from current system facts.",
     )

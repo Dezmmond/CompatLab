@@ -30,6 +30,9 @@ class SystemFacts(BaseModel):
     os_release: OsReleaseFacts = Field(default_factory=OsReleaseFacts)
     architecture: str | None = None
     glibc_version: str | None = None
+    source_image: str | None = None
+    source_image_id: str | None = None
+    platform: str | None = None
     dynamic_linkers: list[str] = Field(default_factory=list)
     library_paths: list[str] = Field(default_factory=list)
     libraries: list[LibraryFact] = Field(default_factory=list)
@@ -42,9 +45,12 @@ class ProfileMetadata(BaseModel):
     generated_by: str | None = None
     generated_at: str | None = None
     source: str | None = None
+    source_image: str | None = None
+    source_image_id: str | None = None
     source_os_id: str | None = None
     source_os_version_id: str | None = None
     detection_backend: str | None = None
+    platform: str | None = None
 
 
 class LibcProfile(BaseModel):
