@@ -28,6 +28,8 @@ def render_report(report: ArtifactReport, console: Console) -> None:
         console.print("[bold]Scan:[/bold] [green]OK[/green]")
         console.print(f"[bold]Problems:[/bold] {len(report.problems)}")
         console.print(f"[bold]Warnings:[/bold] {len(report.warnings)}")
+    if report.dependency_graph is not None:
+        _render_dependency_graph(report, console)
 
     if report.problems:
         table = Table(title="Problems")
@@ -77,6 +79,23 @@ def _render_elf(report: ArtifactReport, console: Console) -> None:
             console.print(f"  [bold]{namespace}:[/bold]")
             for version in versions:
                 console.print(f"    - {version}")
+
+
+def _render_dependency_graph(report: ArtifactReport, console: Console) -> None:
+    graph = report.dependency_graph
+    if graph is None:
+        return
+    console.print(f"[bold]Dependency nodes:[/bold] {len(graph.nodes)}")
+    console.print(f"[bold]Dependency edges:[/bold] {len(graph.edges)}")
+    table = Table(title="Dependency Resolution")
+    table.add_column("From")
+    table.add_column("Needed")
+    table.add_column("Source")
+    table.add_column("Resolved")
+    for edge in graph.edges:
+        resolved = edge.resolved_artifact_id or edge.resolved_path or edge.message or ""
+        table.add_row(edge.from_artifact_id, edge.needed_name, edge.resolution_kind.value, resolved)
+    console.print(table)
 
 
 def _render_list(console: Console, title: str, values: list[str], empty: str | None = None) -> None:
