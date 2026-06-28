@@ -1,0 +1,19 @@
+id: rocky-9
+name: Rocky Linux 9
+arch: x86_64
+libc:
+  family: glibc
+  version: "2.34"
+libstdcxx:
+  max_glibcxx: "3.4.29"
+  max_cxxabi: "1.3.13"
+interpreters:
+  - /lib64/ld-linux-x86-64.so.2
+provided_libraries:
+  - soname: libc.so.6
+  - soname: libstdc++.so.6
+  - soname: libgcc_s.so.1
+  - soname: libm.so.6
+  - soname: libpthread.so.0
+  - soname: libdl.so.2
+notes: Initial approximate profile for skeleton development.

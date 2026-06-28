@@ -1,0 +1,16 @@
+PROBLEM_IDS = {
+    "wrong.architecture",
+    "missing.interpreter",
+    "profile.interpreter_not_provided",
+    "missing.library",
+    "profile.library_not_provided",
+    "glibc.too_new",
+    "glibcxx.too_new",
+    "cxxabi.too_new",
+    "bad.rpath.absolute",
+    "bad.rpath.build_path",
+    "bad.runpath.absolute",
+    "bad.runpath.build_path",
+    "unsupported.elf",
+    "scan.failed",
+}
