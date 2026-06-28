@@ -8,9 +8,8 @@ The product goal is to turn low-level ELF facts into a compatibility diagnosis:
 too-new `glibc` or `libstdc++`, missing dynamic linker, missing `DT_NEEDED`
 libraries, wrong architecture, and suspicious `RPATH`/`RUNPATH` values.
 
-This repository currently contains the first clean project skeleton. Commands
-return structured stub reports while the real `readelf` backend and comparison
-rules are added in later steps.
+This repository contains the Python-first CLI skeleton and the first real ELF
+scanner backend based on the system `readelf` utility.
 
 ## CLI
 
@@ -49,8 +48,12 @@ implementation. Those are explicitly outside the first implementation pass.
 ## Development
 
 ```bash
-uv run pytest
-uv run ruff check .
-uv run ruff format .
+make test
+make coverage
+make check
 uv run compatlab scan /bin/bash
 ```
+
+`make coverage` prints the total test coverage percentage in the terminal and
+writes `coverage.xml`. `make coverage-html` also writes an HTML report under
+`htmlcov/`.

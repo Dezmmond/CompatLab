@@ -1,5 +1,7 @@
 from pathlib import Path
+import shutil
 
+import pytest
 from typer.testing import CliRunner
 
 from compatlab.src.cli import app
@@ -8,7 +10,7 @@ from compatlab.src.cli import app
 runner = CliRunner()
 
 
-def test_scan_command_outputs_stub_report(tmp_path: Path) -> None:
+def test_scan_command_outputs_scan_status(tmp_path: Path) -> None:
     artifact = tmp_path / "demo-app"
     artifact.write_bytes(b"not really elf yet")
 
@@ -16,8 +18,10 @@ def test_scan_command_outputs_stub_report(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Artifact:" in result.output
-    assert "Compatibility:" in result.output
-    assert "PASS" in result.output
+    assert "Scan:" in result.output
+    assert "Problems:" in result.output
+    assert "Warnings:" in result.output
+    assert "Compatibility:" not in result.output
 
 
 def test_scan_command_writes_json_report(tmp_path: Path) -> None:
@@ -30,6 +34,19 @@ def test_scan_command_writes_json_report(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert report.exists()
     assert '"tool": "compatlab"' in report.read_text(encoding="utf-8")
+
+
+def test_scan_command_smoke_scans_bin_bash() -> None:
+    bash = Path("/bin/bash")
+    if not bash.exists() or shutil.which("readelf") is None:
+        pytest.skip("/bin/bash or readelf is not available")
+
+    result = runner.invoke(app, ["scan", str(bash)])
+
+    assert result.exit_code == 0
+    assert "Artifact:" in result.output
+    assert "ELF" in result.output
+    assert "Compatibility:" not in result.output
 
 
 def test_compare_command_loads_builtin_profile(tmp_path: Path) -> None:

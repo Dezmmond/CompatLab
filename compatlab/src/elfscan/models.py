@@ -9,8 +9,11 @@ class SymbolVersion(BaseModel):
 
 class ElfInfo(BaseModel):
     elf_class: str | None = None
+    endianness: str | None = None
+    os_abi: str | None = None
     machine: str | None = None
     elf_type: str | None = None
+    entry_point: str | None = None
     interpreter: str | None = None
     is_dynamic: bool | None = None
     needed: list[str] = Field(default_factory=list)
