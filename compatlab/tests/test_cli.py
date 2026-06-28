@@ -66,6 +66,17 @@ def _docker_facts() -> SystemFacts:
     )
 
 
+def _docker_runtime_facts() -> SystemFacts:
+    facts = _docker_facts()
+    return facts.model_copy(
+        update={
+            "runtime_preset": "cpp-runtime",
+            "runtime_packages": ["libstdc++6", "libgcc-s1"],
+            "package_manager": "apt-get",
+        }
+    )
+
+
 def test_scan_command_outputs_scan_status(tmp_path: Path) -> None:
     artifact = tmp_path / "demo-app"
     artifact.write_bytes(b"not really elf yet")
@@ -189,6 +200,30 @@ def test_profiles_show_outputs_profile_json() -> None:
     assert '"name": "Ubuntu 22.04"' in result.output
 
 
+def test_runtime_presets_list_outputs_builtin_presets() -> None:
+    result = runner.invoke(app, ["profiles", "runtime-presets", "list"])
+
+    assert result.exit_code == 0
+    assert "cpp-runtime" in result.output
+    assert "python-runtime" in result.output
+
+
+def test_runtime_presets_show_outputs_preset_details() -> None:
+    result = runner.invoke(app, ["profiles", "runtime-presets", "show", "cpp-runtime"])
+
+    assert result.exit_code == 0
+    assert "Common C/C++ runtime libraries" in result.output
+    assert "apt-get" in result.output
+    assert "libstdc++6" in result.output
+
+
+def test_runtime_presets_show_rejects_unknown_preset() -> None:
+    result = runner.invoke(app, ["profiles", "runtime-presets", "show", "node-runtime"])
+
+    assert result.exit_code == 2
+    assert "Unknown runtime preset" in result.output
+
+
 def test_profiles_detect_writes_raw_facts_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -237,6 +272,46 @@ def test_profiles_detect_from_image_writes_raw_facts_json(
     raw = json.loads(output.read_text(encoding="utf-8"))
     assert raw["source_image"] == "ubuntu:22.04"
     assert raw["platform"] == "linux/amd64"
+
+
+def test_profiles_detect_from_image_with_runtime_preset_writes_runtime_facts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "system-facts.json"
+
+    def fake_detect(image: str, **kwargs: object) -> SystemFacts:
+        assert image == "ubuntu:22.04"
+        assert kwargs["runtime_preset"] == "cpp-runtime"
+        return _docker_runtime_facts()
+
+    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "detect",
+            "--from-image",
+            "ubuntu:22.04",
+            "--runtime-preset",
+            "cpp-runtime",
+            "--json",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["runtime_preset"] == "cpp-runtime"
+    assert raw["runtime_packages"] == ["libstdc++6", "libgcc-s1"]
+    assert raw["package_manager"] == "apt-get"
+
+
+def test_profiles_detect_rejects_runtime_preset_without_image() -> None:
+    result = runner.invoke(app, ["profiles", "detect", "--runtime-preset", "cpp-runtime"])
+
+    assert result.exit_code == 2
+    assert "--runtime-preset is valid only with --from-image" in result.output
 
 
 def test_profiles_generate_writes_loadable_yaml(
@@ -300,6 +375,44 @@ def test_profiles_generate_from_image_writes_loadable_yaml(
     assert loaded.metadata.platform == "linux/amd64"
 
 
+def test_profiles_generate_from_image_with_runtime_preset_writes_runtime_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "ubuntu-2204.yaml"
+
+    def fake_detect(image: str, **kwargs: object) -> SystemFacts:
+        assert image == "ubuntu:22.04"
+        assert kwargs["runtime_preset"] == "cpp-runtime"
+        return _docker_runtime_facts()
+
+    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "generate",
+            "--from-image",
+            "ubuntu:22.04",
+            "--runtime-preset",
+            "cpp-runtime",
+            "--name",
+            "ubuntu-2204-cpp-runtime",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Runtime preset:" in result.output
+    loaded = load_profile_file(output)
+    assert loaded.metadata is not None
+    assert loaded.metadata.source == "docker-runtime-image"
+    assert loaded.metadata.runtime_preset == "cpp-runtime"
+    assert loaded.metadata.runtime_packages == ["libstdc++6", "libgcc-s1"]
+    assert loaded.metadata.package_manager == "apt-get"
+
+
 def test_profiles_generate_rejects_multiple_sources(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
@@ -316,6 +429,24 @@ def test_profiles_generate_rejects_multiple_sources(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "Provide exactly one" in result.output
+
+
+def test_profiles_generate_rejects_runtime_preset_with_current_system(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "profiles",
+            "generate",
+            "--from-current",
+            "--runtime-preset",
+            "cpp-runtime",
+            "--output",
+            str(tmp_path / "local.yaml"),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--runtime-preset is valid only with --from-image" in result.output
 
 
 def test_profiles_generate_from_image_reports_docker_error(

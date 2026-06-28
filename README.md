@@ -23,6 +23,8 @@ compatlab profiles show ubuntu-1804
 compatlab profiles detect
 compatlab profiles generate --from-current --name local --output local.yaml
 compatlab profiles generate --from-image ubuntu:22.04 --name ubuntu-2204-docker --output ubuntu-2204.yaml
+compatlab profiles runtime-presets list
+compatlab profiles generate --from-image ubuntu:22.04 --runtime-preset cpp-runtime --name ubuntu-2204-cpp --output ubuntu-2204-cpp.yaml
 compatlab profiles validate ubuntu-2204.yaml
 ```
 
@@ -33,6 +35,7 @@ compatlab scan ./app --json report.json
 compatlab compare ./app --target ubuntu-1804 --json report.json
 compatlab profiles detect --json system-facts.json
 compatlab profiles detect --from-image ubuntu:22.04 --json image-facts.json
+compatlab profiles detect --from-image ubuntu:22.04 --runtime-preset cpp-runtime --json runtime-facts.json
 ```
 
 ## Docker Image Profiles
@@ -64,6 +67,33 @@ uv run compatlab profiles generate \
   --output /tmp/ubuntu-2204-docker.yaml
 ```
 
+## Docker Runtime Presets
+
+CompatLab can generate a profile from a temporary Docker runtime environment
+after installing a predefined runtime package preset. The source image is not
+mutated, committed, or saved. CompatLab creates a temporary container, installs
+the selected preset packages inside that container, exports the resulting rootfs,
+and reuses the Docker image profile detection pipeline.
+
+```bash
+uv run compatlab profiles runtime-presets list
+uv run compatlab profiles runtime-presets show cpp-runtime
+
+uv run compatlab profiles generate \
+  --from-image ubuntu:22.04 \
+  --runtime-preset cpp-runtime \
+  --name ubuntu-2204-cpp-runtime \
+  --output /tmp/ubuntu-2204-cpp-runtime.yaml
+```
+
+Built-in v0.6 presets:
+
+- `cpp-runtime`: common C/C++ runtime libraries;
+- `python-runtime`: common Python 3 runtime libraries.
+
+Runtime preset installation currently supports `apt-get`, `dnf`, and `yum`
+based images.
+
 ## MVP Scope
 
 The first MVP is intentionally narrow:
@@ -74,15 +104,16 @@ The first MVP is intentionally narrow:
 - JSON reports based on Pydantic models;
 - Typer-based CLI suitable for CI;
 - target profiles for common Linux baselines;
-- generated target profiles from the current system or Docker image rootfs;
+- generated target profiles from the current system, Docker image rootfs, or a
+  temporary Docker runtime preset environment;
 - problem taxonomy ready for compatibility diagnostics.
 
 ## Not In Scope Yet
 
-CompatLab does not add runtime package presets, package installation inside
-Docker images, web UI, database, daemon, wheel/RPM/DEB analysis, SBOM/security
-scanning, automatic patching, or a Go implementation. Those are explicitly
-outside the current implementation pass.
+CompatLab does not add arbitrary package installation, Dockerfile generation,
+Docker image mutation/commit, web UI, database, daemon, wheel/RPM/DEB analysis,
+SBOM/security scanning, automatic patching, or a Go implementation. Those are
+explicitly outside the current implementation pass.
 
 ## Development
 
