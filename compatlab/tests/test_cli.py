@@ -1,13 +1,57 @@
 from pathlib import Path
+import json
 import shutil
 
 import pytest
 from typer.testing import CliRunner
 
 from compatlab.src.cli import app
+from compatlab.src.profile.loader import load_profile_file
+from compatlab.src.profile.models import (
+    LibraryFact,
+    OsReleaseFacts,
+    SystemFacts,
+    SymbolVersionFacts,
+)
 
 
 runner = CliRunner()
+
+
+PROFILE_YAML = """
+id: local
+name: Local Test
+arch: x86_64
+libc:
+  family: glibc
+  version: "2.39"
+libstdcxx:
+  max_glibcxx: "3.4.33"
+  max_cxxabi: "1.3.15"
+interpreters:
+  - /lib64/ld-linux-x86-64.so.2
+provided_libraries:
+  - soname: libc.so.6
+"""
+
+
+def _write_profile(path: Path) -> None:
+    path.write_text(PROFILE_YAML, encoding="utf-8")
+
+
+def _system_facts() -> SystemFacts:
+    return SystemFacts(
+        os_release=OsReleaseFacts(id="ubuntu", version_id="24.04", pretty_name="Ubuntu 24.04 LTS"),
+        architecture="x86_64",
+        glibc_version="2.39",
+        dynamic_linkers=["/lib64/ld-linux-x86-64.so.2"],
+        libraries=[LibraryFact(soname="libc.so.6", path="/lib/libc.so.6")],
+        symbol_versions=SymbolVersionFacts(
+            glibc=["2.39"],
+            glibcxx=["3.4.33"],
+            cxxabi=["1.3.15"],
+        ),
+    )
 
 
 def test_scan_command_outputs_scan_status(tmp_path: Path) -> None:
@@ -61,6 +105,62 @@ def test_compare_command_returns_scan_error_for_non_elf(tmp_path: Path) -> None:
     assert "scan.failed" in result.output
 
 
+def test_compare_command_accepts_external_target_file(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+    profile = tmp_path / "local.yaml"
+    _write_profile(profile)
+
+    result = runner.invoke(app, ["compare", str(artifact), "--target-file", str(profile)])
+
+    assert result.exit_code == 2
+    assert "Local Test" in result.output
+    assert "scan.failed" in result.output
+
+
+def test_compare_command_rejects_missing_external_target_file(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target-file", str(tmp_path / "missing.yaml")],
+    )
+
+    assert result.exit_code == 2
+    assert "Profile file does not exist" in result.output
+
+
+def test_compare_command_rejects_invalid_external_target_file(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+    profile = tmp_path / "broken.yaml"
+    profile.write_text("id: local\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["compare", str(artifact), "--target-file", str(profile)])
+
+    assert result.exit_code == 2
+    assert "Invalid target profile" in result.output
+
+
+def test_compare_command_requires_exactly_one_target_selector(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-app"
+    artifact.write_bytes(b"not really elf yet")
+    profile = tmp_path / "local.yaml"
+    _write_profile(profile)
+
+    neither = runner.invoke(app, ["compare", str(artifact)])
+    both = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target", "ubuntu-2404", "--target-file", str(profile)],
+    )
+
+    assert neither.exit_code == 2
+    assert both.exit_code == 2
+    assert "Provide exactly one" in neither.output
+    assert "Provide exactly one" in both.output
+
+
 def test_profiles_list_outputs_builtin_profiles() -> None:
     result = runner.invoke(app, ["profiles", "list"])
 
@@ -75,3 +175,104 @@ def test_profiles_show_outputs_profile_json() -> None:
     assert result.exit_code == 0
     assert '"id": "ubuntu-2204"' in result.output
     assert '"name": "Ubuntu 22.04"' in result.output
+
+
+def test_profiles_detect_writes_raw_facts_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "system-facts.json"
+    monkeypatch.setattr("compatlab.src.cli.detect_current_system", _system_facts)
+
+    result = runner.invoke(app, ["profiles", "detect", "--json", str(output)])
+
+    assert result.exit_code == 0
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["os_release"]["id"] == "ubuntu"
+    assert raw["architecture"] == "x86_64"
+    assert raw["symbol_versions"]["glibc"] == ["2.39"]
+    assert "System profile detected" in result.output
+
+
+def test_profiles_generate_writes_loadable_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "local.yaml"
+    monkeypatch.setattr("compatlab.src.cli.detect_current_system", _system_facts)
+
+    result = runner.invoke(
+        app,
+        ["profiles", "generate", "--from-current", "--name", "local", "--output", str(output)],
+    )
+
+    assert result.exit_code == 0
+    assert "generated" in result.output
+    generated = output.read_text(encoding="utf-8")
+    assert "metadata:" in generated
+    assert "generated_by: compatlab" in generated
+    loaded = load_profile_file(output)
+    assert loaded.id == "local"
+    assert loaded.metadata is not None
+
+
+def test_profiles_validate_accepts_valid_profile(tmp_path: Path) -> None:
+    profile = tmp_path / "local.yaml"
+    _write_profile(profile)
+
+    result = runner.invoke(app, ["profiles", "validate", str(profile)])
+
+    assert result.exit_code == 0
+    assert "Status:" in result.output
+    assert "valid" in result.output
+    assert "local" in result.output
+
+
+def test_profiles_validate_rejects_missing_profile(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["profiles", "validate", str(tmp_path / "missing.yaml")])
+
+    assert result.exit_code == 2
+    assert "invalid" in result.output
+    assert "Profile file does not exist" in result.output
+
+
+def test_profiles_validate_rejects_invalid_profile_and_writes_json(tmp_path: Path) -> None:
+    profile = tmp_path / "broken.yaml"
+    profile.write_text("id: local\n", encoding="utf-8")
+    output = tmp_path / "validation.json"
+
+    result = runner.invoke(app, ["profiles", "validate", str(profile), "--json", str(output)])
+
+    assert result.exit_code == 2
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["status"] == "invalid"
+    assert "Invalid target profile" in raw["error"]
+
+
+def test_profiles_validate_rejects_malformed_yaml(tmp_path: Path) -> None:
+    profile = tmp_path / "broken.yaml"
+    profile.write_text("id: [\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["profiles", "validate", str(profile)])
+
+    assert result.exit_code == 2
+    assert "Invalid YAML profile" in result.output
+
+
+def test_profiles_validate_rejects_wrong_field_types(tmp_path: Path) -> None:
+    profile = tmp_path / "wrong-types.yaml"
+    profile.write_text(
+        """
+id: local
+name: Local Test
+arch:
+  - x86_64
+libc:
+  family: glibc
+  version: "2.39"
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["profiles", "validate", str(profile)])
+
+    assert result.exit_code == 2
+    assert "Invalid target profile" in result.output

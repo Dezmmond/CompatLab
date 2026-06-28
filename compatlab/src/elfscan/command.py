@@ -12,8 +12,7 @@ class CommandResult:
     stderr: str
 
 
-def run_readelf(args: list[str], path: Path, timeout: float = 5.0) -> CommandResult:
-    command = ["readelf", *args, str(path)]
+def run_command(command: list[str], timeout: float = 5.0) -> CommandResult:
     try:
         completed = subprocess.run(
             command,
@@ -28,14 +27,14 @@ def run_readelf(args: list[str], path: Path, timeout: float = 5.0) -> CommandRes
             args=command,
             returncode=127,
             stdout="",
-            stderr="readelf command not found",
+            stderr=f"{command[0]} command not found",
         )
     except subprocess.TimeoutExpired as exc:
         return CommandResult(
             args=command,
             returncode=124,
             stdout=exc.stdout or "",
-            stderr=f"readelf command timed out after {timeout:g}s",
+            stderr=f"{command[0]} command timed out after {timeout:g}s",
         )
 
     return CommandResult(
@@ -44,3 +43,8 @@ def run_readelf(args: list[str], path: Path, timeout: float = 5.0) -> CommandRes
         stdout=completed.stdout,
         stderr=completed.stderr,
     )
+
+
+def run_readelf(args: list[str], path: Path, timeout: float = 5.0) -> CommandResult:
+    command = ["readelf", *args, str(path)]
+    return run_command(command, timeout=timeout)

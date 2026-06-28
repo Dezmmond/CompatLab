@@ -14,6 +14,39 @@ class LibraryFact(BaseModel):
     arch: str | None = None
 
 
+class SymbolVersionFacts(BaseModel):
+    glibc: list[str] = Field(default_factory=list)
+    glibcxx: list[str] = Field(default_factory=list)
+    cxxabi: list[str] = Field(default_factory=list)
+
+
+class FactWarning(BaseModel):
+    code: str
+    message: str
+    source: str | None = None
+
+
+class SystemFacts(BaseModel):
+    os_release: OsReleaseFacts = Field(default_factory=OsReleaseFacts)
+    architecture: str | None = None
+    glibc_version: str | None = None
+    dynamic_linkers: list[str] = Field(default_factory=list)
+    library_paths: list[str] = Field(default_factory=list)
+    libraries: list[LibraryFact] = Field(default_factory=list)
+    symbol_versions: SymbolVersionFacts = Field(default_factory=SymbolVersionFacts)
+    detected_by: list[str] = Field(default_factory=list)
+    warnings: list[FactWarning] = Field(default_factory=list)
+
+
+class ProfileMetadata(BaseModel):
+    generated_by: str | None = None
+    generated_at: str | None = None
+    source: str | None = None
+    source_os_id: str | None = None
+    source_os_version_id: str | None = None
+    detection_backend: str | None = None
+
+
 class LibcProfile(BaseModel):
     family: str
     version: str
@@ -36,4 +69,5 @@ class TargetProfile(BaseModel):
     libstdcxx: LibstdcxxProfile | None = None
     interpreters: list[str] = Field(default_factory=list)
     provided_libraries: list[ProvidedLibrary] = Field(default_factory=list)
+    metadata: ProfileMetadata | None = None
     notes: str | None = None
