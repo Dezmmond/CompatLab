@@ -87,3 +87,7 @@ def profiles_show(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
     console.print_json(profile.model_dump_json(indent=2))
+
+
+if __name__ == "__main__":
+    app()
