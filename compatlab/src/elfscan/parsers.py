@@ -29,75 +29,95 @@ def _endianness(value: str) -> str | None:
     return None
 
 
+class ElfHeaderParser:
+    def parse(self, output: str) -> dict[str, str | None]:
+        fields: dict[str, str | None] = {}
+        for line in output.splitlines():
+            parsed = _field_value(line)
+            if parsed is None:
+                continue
+            key, value = parsed
+            if key == "Class":
+                fields["elf_class"] = value
+            elif key == "Data":
+                fields["endianness"] = _endianness(value)
+            elif key == "OS/ABI":
+                fields["os_abi"] = value
+            elif key == "Type":
+                fields["elf_type"] = _elf_type(value)
+            elif key == "Machine":
+                fields["machine"] = value
+            elif key == "Entry point address":
+                fields["entry_point"] = value
+        return fields
+
+
+class ProgramHeaderParser:
+    _INTERPRETER_MARKER = "[Requesting program interpreter:"
+
+    def parse(self, output: str) -> dict[str, str]:
+        for line in output.splitlines():
+            if self._INTERPRETER_MARKER not in line:
+                continue
+            _, value = line.split(self._INTERPRETER_MARKER, 1)
+            return {"interpreter": value.rstrip("]").strip()}
+        return {}
+
+
+class DynamicSectionParser:
+    def parse(self, output: str) -> dict[str, list[str] | bool]:
+        needed: list[str] = []
+        rpath: list[str] = []
+        runpath: list[str] = []
+
+        for line in output.splitlines():
+            value_match = _DYNAMIC_VALUE_RE.search(line)
+            if value_match is None:
+                continue
+            value = value_match.group("value")
+            if "(NEEDED)" in line:
+                needed.append(value)
+            elif "(RPATH)" in line:
+                rpath.append(value)
+            elif "(RUNPATH)" in line:
+                runpath.append(value)
+
+        return {
+            "is_dynamic": bool(needed or rpath or runpath or "Dynamic section at offset" in output),
+            "needed": needed,
+            "rpath": rpath,
+            "runpath": runpath,
+        }
+
+
+class VersionInfoParser:
+    def parse(self, output: str) -> list[SymbolVersion]:
+        versions: dict[str, SymbolVersion] = {}
+        for match in _VERSION_RE.finditer(output):
+            namespace = match.group("namespace")
+            version = match.group("version")
+            raw = f"{namespace}_{version}"
+            versions[raw] = SymbolVersion(namespace=namespace, version=version, raw=raw)
+        return sorted(versions.values(), key=self._sort_key)
+
+    def _sort_key(self, version: SymbolVersion) -> tuple[str, tuple[int | str, ...], str]:
+        parts: list[int | str] = []
+        for part in version.version.split("."):
+            parts.append(int(part) if part.isdigit() else part)
+        return version.namespace, tuple(parts), version.raw
+
+
 def parse_elf_header(output: str) -> dict[str, str | None]:
-    fields: dict[str, str | None] = {}
-    for line in output.splitlines():
-        parsed = _field_value(line)
-        if parsed is None:
-            continue
-        key, value = parsed
-        if key == "Class":
-            fields["elf_class"] = value
-        elif key == "Data":
-            fields["endianness"] = _endianness(value)
-        elif key == "OS/ABI":
-            fields["os_abi"] = value
-        elif key == "Type":
-            fields["elf_type"] = _elf_type(value)
-        elif key == "Machine":
-            fields["machine"] = value
-        elif key == "Entry point address":
-            fields["entry_point"] = value
-    return fields
+    return ElfHeaderParser().parse(output)
 
 
 def parse_program_headers(output: str) -> dict[str, str]:
-    for line in output.splitlines():
-        marker = "[Requesting program interpreter:"
-        if marker not in line:
-            continue
-        _, value = line.split(marker, 1)
-        return {"interpreter": value.rstrip("]").strip()}
-    return {}
+    return ProgramHeaderParser().parse(output)
 
 
 def parse_dynamic_section(output: str) -> dict[str, list[str] | bool]:
-    needed: list[str] = []
-    rpath: list[str] = []
-    runpath: list[str] = []
-
-    for line in output.splitlines():
-        value_match = _DYNAMIC_VALUE_RE.search(line)
-        if value_match is None:
-            continue
-        value = value_match.group("value")
-        if "(NEEDED)" in line:
-            needed.append(value)
-        elif "(RPATH)" in line:
-            rpath.append(value)
-        elif "(RUNPATH)" in line:
-            runpath.append(value)
-
-    return {
-        "is_dynamic": bool(needed or rpath or runpath or "Dynamic section at offset" in output),
-        "needed": needed,
-        "rpath": rpath,
-        "runpath": runpath,
-    }
-
-
-def _version_sort_key(version: SymbolVersion) -> tuple[str, tuple[int | str, ...], str]:
-    parts: list[int | str] = []
-    for part in version.version.split("."):
-        parts.append(int(part) if part.isdigit() else part)
-    return version.namespace, tuple(parts), version.raw
+    return DynamicSectionParser().parse(output)
 
 
 def parse_version_info(output: str) -> list[SymbolVersion]:
-    versions: dict[str, SymbolVersion] = {}
-    for match in _VERSION_RE.finditer(output):
-        namespace = match.group("namespace")
-        version = match.group("version")
-        raw = f"{namespace}_{version}"
-        versions[raw] = SymbolVersion(namespace=namespace, version=version, raw=raw)
-    return sorted(versions.values(), key=_version_sort_key)
+    return VersionInfoParser().parse(output)

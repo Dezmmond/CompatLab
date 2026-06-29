@@ -8,19 +8,24 @@ _LDCONFIG_LINE_RE = re.compile(
 )
 
 
+class LdconfigCacheParser:
+    def parse(self, output: str) -> list[LibraryFact]:
+        libraries: dict[str, LibraryFact] = {}
+        for line in output.splitlines():
+            match = _LDCONFIG_LINE_RE.match(line)
+            if match is None:
+                continue
+            soname = match.group("soname")
+            libraries.setdefault(
+                soname,
+                LibraryFact(
+                    soname=soname,
+                    path=match.group("path"),
+                    arch=match.group("arch") or None,
+                ),
+            )
+        return [libraries[soname] for soname in sorted(libraries)]
+
+
 def parse_ldconfig_cache(output: str) -> list[LibraryFact]:
-    libraries: dict[str, LibraryFact] = {}
-    for line in output.splitlines():
-        match = _LDCONFIG_LINE_RE.match(line)
-        if match is None:
-            continue
-        soname = match.group("soname")
-        libraries.setdefault(
-            soname,
-            LibraryFact(
-                soname=soname,
-                path=match.group("path"),
-                arch=match.group("arch") or None,
-            ),
-        )
-    return [libraries[soname] for soname in sorted(libraries)]
+    return LdconfigCacheParser().parse(output)
