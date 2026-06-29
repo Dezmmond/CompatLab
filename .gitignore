@@ -1,5 +1,5 @@
-.idea
-.venv
+.idea/
+.venv/
 /bin/
 /bin/*
 /.pytest_cache
@@ -9,3 +9,5 @@ __pycache__/
 /.coverage
 /coverage.xml
 /htmlcov/
+/.codex/
+/.agents/
