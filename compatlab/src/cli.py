@@ -1,56 +1,45 @@
 from pathlib import Path
-import json
 from typing import Annotated
 
 import typer
 from rich.console import Console
-import yaml
 
 from . import __version__
-from .bundle.models import DependencyGraph, DependencyResolutionKind
 from .bundle.resolver import (
     DEFAULT_MAX_DEPTH,
-    DEFAULT_MAX_FILES,
-    BundleResolutionError,
-    resolve_bundle_dependencies,
+    DEFAULT_MAX_FILES
 )
-from .compare.engine import compare_report
-from .diagnostics import (
-    FailOn,
-    diagnostics_from_report_parts,
-    should_fail_for_diagnostics,
-    summarize_diagnostics,
+from .services.artifacts import (
+    ArtifactCommandService,
+    CompareCommandOptions,
+    ScanCommandOptions
 )
-from .elfscan.scanner import scan_path
-from .problem.models import Problem
-from .profile.detect import detect_current_system
-from .profile.docker_cli import DockerError
-from .profile.docker_image import detect_docker_image_system
-from .profile.generate import generate_target_profile_from_facts
-from .profile.loader import (
-    ProfileLoadError,
-    ProfileNotFoundError,
-    list_builtin_profiles,
-    load_profile_file,
-    load_target_profile,
-)
-from .profile.models import SystemFacts, TargetProfile
-from .profile.runtime_presets import (
-    RuntimePreset,
-    RuntimePresetError,
-    get_runtime_preset,
-    list_runtime_presets,
-)
-from .report.html import HtmlReportContext, write_html_report
-from .report.json import write_json_report
-from .report.pretty import render_profiles, render_report
+from .services.profiles import ProfileCommandService
+from .diagnostics import FailOn
+
 
 app = typer.Typer(help="Preflight compatibility checker for Linux binary artifacts.")
+
 profiles_app = typer.Typer(help="Inspect built-in target profiles.")
 runtime_presets_app = typer.Typer(help="Inspect built-in Docker runtime presets.")
+
 app.add_typer(profiles_app, name="profiles")
 profiles_app.add_typer(runtime_presets_app, name="runtime-presets")
+
 console = Console()
+
+
+class CliServiceFactory:
+    @staticmethod
+    def artifacts() -> ArtifactCommandService:
+        return ArtifactCommandService(console=console)
+
+    @staticmethod
+    def profiles() -> ProfileCommandService:
+        return ProfileCommandService(console=console)
+
+
+services = CliServiceFactory()
 
 
 def _version_callback(value: bool) -> None:
@@ -95,40 +84,18 @@ def scan(
     ] = None,
 ) -> None:
     """Scan one Linux artifact and print a structured stub report."""
-    report = scan_path(path)
-    if bundle_root is not None:
-        try:
-            resolution = resolve_bundle_dependencies(
-                path,
-                bundle_root,
-                recursive=recursive,
-                max_depth=max_depth,
-                max_files=max_files,
-            )
-        except BundleResolutionError as exc:
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(2) from exc
-        report = report.model_copy(
-            update={
-                "dependency_graph": resolution.graph,
-                "warnings": [*report.warnings, *resolution.warnings],
-            }
-        )
-    report = _with_diagnostics(report)
-    _write_reports(
-        report,
-        json_output=json_output,
-        html_output=html_output,
-        html_context=HtmlReportContext(
-            report_type="scan",
-            command_mode="scan",
-            bundle_root=str(bundle_root) if bundle_root is not None else None,
+    services.artifacts().scan(
+        ScanCommandOptions(
+            path=path,
+            bundle_root=bundle_root,
             recursive=recursive,
-        ),
+            max_depth=max_depth,
+            max_files=max_files,
+            fail_on=fail_on,
+            json_output=json_output,
+            html_output=html_output,
+        )
     )
-    render_report(report, console)
-    if should_fail_for_diagnostics(report.diagnostics, fail_on):
-        raise typer.Exit(1)
 
 
 @app.command()
@@ -162,188 +129,26 @@ def compare(
     ] = None,
 ) -> None:
     """Compare one Linux artifact with a target profile."""
-    if (target is None) == (target_file is None):
-        console.print("[red]Provide exactly one of --target or --target-file.[/red]")
-        raise typer.Exit(2)
-
-    try:
-        profile = (
-            load_profile_file(target_file)
-            if target_file is not None
-            else load_target_profile(target or "")
-        )
-    except (ProfileNotFoundError, ProfileLoadError) as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(2) from exc
-
-    scan_report = scan_path(path)
-    if scan_report.elf is None or scan_report.elf.elf_class is None:
-        report = scan_report.model_copy(
-            update={
-                "target": profile,
-                "problems": [
-                    *scan_report.problems,
-                    Problem(
-                        id="scan.failed",
-                        severity="HIGH",
-                        title="Artifact could not be scanned as ELF",
-                        details="readelf did not return a parseable ELF header.",
-                        artifact_path=str(path),
-                    ),
-                ],
-            }
-        )
-        report = _with_diagnostics(report)
-        _write_reports(
-            report,
-            json_output=json_output,
-            html_output=html_output,
-            html_context=_compare_html_context(
-                target=target,
-                target_file=target_file,
-                bundle_root=bundle_root,
-                recursive=recursive,
-            ),
-        )
-        render_report(report, console)
-        raise typer.Exit(2)
-
-    if bundle_root is not None:
-        try:
-            resolution = resolve_bundle_dependencies(
-                path,
-                bundle_root,
-                target=profile,
-                recursive=recursive,
-                max_depth=max_depth,
-                max_files=max_files,
-            )
-        except BundleResolutionError as exc:
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(2) from exc
-        bundled_libraries = resolution.bundled_library_names
-        report = compare_report(
-            scan_report,
-            profile,
-            assumed_provided_libraries=bundled_libraries,
-        )
-        problems = [*report.problems, *_dependency_problems(resolution.graph)]
-        warnings = [*report.warnings, *resolution.warnings]
-        for artifact_id, artifact_report in resolution.reports.items():
-            if artifact_id == resolution.graph.entrypoint_artifact_id:
-                continue
-            compared = compare_report(
-                artifact_report,
-                profile,
-                assumed_provided_libraries=bundled_libraries,
-            )
-            problems.extend(compared.problems)
-            warnings.extend(compared.warnings)
-        report = report.model_copy(
-            update={
-                "dependency_graph": resolution.graph,
-                "problems": problems,
-                "warnings": warnings,
-            }
-        )
-    else:
-        report = compare_report(scan_report, profile)
-    report = _with_diagnostics(report)
-    _write_reports(
-        report,
-        json_output=json_output,
-        html_output=html_output,
-        html_context=_compare_html_context(
+    services.artifacts().compare(
+        CompareCommandOptions(
+            path=path,
             target=target,
             target_file=target_file,
             bundle_root=bundle_root,
             recursive=recursive,
-        ),
-    )
-    render_report(report, console)
-    if should_fail_for_diagnostics(report.diagnostics, fail_on):
-        raise typer.Exit(1)
-
-
-def _with_diagnostics(report):
-    diagnostics = diagnostics_from_report_parts(
-        problems=report.problems,
-        warnings=report.warnings,
-        graph=report.dependency_graph,
-    )
-    return report.model_copy(
-        update={
-            "diagnostics": diagnostics,
-            "summary": summarize_diagnostics(diagnostics),
-        }
-    )
-
-
-def _write_reports(
-    report,
-    *,
-    json_output: Path | None,
-    html_output: Path | None,
-    html_context: HtmlReportContext,
-) -> None:
-    try:
-        if json_output is not None:
-            write_json_report(report, json_output)
-        if html_output is not None:
-            write_html_report(report, html_output, context=html_context)
-    except OSError as exc:
-        console.print(f"[red]Could not write report: {exc}[/red]")
-        raise typer.Exit(2) from exc
-
-
-def _compare_html_context(
-    *,
-    target: str | None,
-    target_file: Path | None,
-    bundle_root: Path | None,
-    recursive: bool,
-) -> HtmlReportContext:
-    target_selector = (
-        target if target is not None else str(target_file) if target_file is not None else None
-    )
-    return HtmlReportContext(
-        report_type="compare",
-        command_mode="compare",
-        target_selector=target_selector,
-        bundle_root=str(bundle_root) if bundle_root is not None else None,
-        recursive=recursive,
-    )
-
-
-def _dependency_problems(graph: DependencyGraph) -> list[Problem]:
-    problems: list[Problem] = []
-    for edge in graph.unresolved_dependencies:
-        severity = "HIGH"
-        title = "Dependency could not be resolved"
-        if edge.resolution_kind == DependencyResolutionKind.AMBIGUOUS:
-            severity = "HIGH"
-            title = "Dependency resolution is ambiguous"
-        problems.append(
-            Problem(
-                id=f"bundle.dependency_{edge.resolution_kind.value}",
-                severity=severity,
-                title=title,
-                details=edge.message or f"{edge.needed_name} could not be resolved.",
-                artifact_path=edge.from_artifact_id,
-                evidence={
-                    "from_artifact_id": edge.from_artifact_id,
-                    "needed": edge.needed_name,
-                    "candidates": ", ".join(edge.candidates),
-                },
-            )
+            max_depth=max_depth,
+            max_files=max_files,
+            fail_on=fail_on,
+            json_output=json_output,
+            html_output=html_output,
         )
-    return problems
+    )
 
 
 @profiles_app.command("list")
 def profiles_list() -> None:
     """List built-in target profiles."""
-    render_profiles(list_builtin_profiles(), console)
+    services.profiles().list_profiles()
 
 
 @profiles_app.command("show")
@@ -351,20 +156,13 @@ def profiles_show(
     target: Annotated[str, typer.Argument(help="Built-in profile id or YAML path.")],
 ) -> None:
     """Show one target profile."""
-    try:
-        profile = load_target_profile(target)
-    except ProfileNotFoundError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(2) from exc
-    console.print_json(profile.model_dump_json(indent=2))
+    services.profiles().show_profile(target)
 
 
 @runtime_presets_app.command("list")
 def runtime_presets_list() -> None:
     """List built-in Docker runtime presets."""
-    console.print("[bold]Available runtime presets:[/bold]")
-    for preset in list_runtime_presets():
-        console.print(f"{preset.name:18} {preset.description}")
+    services.profiles().list_runtime_presets()
 
 
 @runtime_presets_app.command("show")
@@ -372,12 +170,7 @@ def runtime_presets_show(
     name: Annotated[str, typer.Argument(help="Runtime preset name.")],
 ) -> None:
     """Show one Docker runtime preset."""
-    try:
-        preset = get_runtime_preset(name)
-    except RuntimePresetError as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(2) from exc
-    _render_runtime_preset(preset)
+    services.profiles().show_runtime_preset(name)
 
 
 @profiles_app.command("detect")
@@ -405,26 +198,13 @@ def profiles_detect(
     ] = None,
 ) -> None:
     """Detect raw facts from the current Linux system."""
-    if runtime_preset is not None and from_image is None:
-        console.print("[red]--runtime-preset is valid only with --from-image.[/red]")
-        raise typer.Exit(2)
-    try:
-        facts = (
-            detect_docker_image_system(
-                from_image,
-                platform=platform,
-                pull=pull,
-                runtime_preset=runtime_preset,
-            )
-            if from_image is not None
-            else detect_current_system()
-        )
-    except (DockerError, RuntimePresetError) as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(2) from exc
-    if json_output is not None:
-        _write_system_facts_json(facts, json_output)
-    _render_system_facts(facts)
+    services.profiles().detect(
+        from_image=from_image,
+        platform=platform,
+        pull=pull,
+        runtime_preset=runtime_preset,
+        json_output=json_output,
+    )
 
 
 @profiles_app.command("generate")
@@ -456,47 +236,15 @@ def profiles_generate(
     ] = None,
 ) -> None:
     """Generate a YAML target profile."""
-    if from_current == (from_image is not None):
-        console.print("[red]Provide exactly one of --from-current or --from-image.[/red]")
-        raise typer.Exit(2)
-    if runtime_preset is not None and from_image is None:
-        console.print("[red]--runtime-preset is valid only with --from-image.[/red]")
-        raise typer.Exit(2)
-    if output is None:
-        console.print("[red]--output is required.[/red]")
-        raise typer.Exit(2)
-
-    try:
-        facts = (
-            detect_docker_image_system(
-                from_image,
-                platform=platform,
-                pull=pull,
-                runtime_preset=runtime_preset,
-            )
-            if from_image is not None
-            else detect_current_system()
-        )
-    except (DockerError, RuntimePresetError) as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(2) from exc
-
-    profile = generate_target_profile_from_facts(facts, name=name)
-    _write_target_profile_yaml(profile, output)
-    if from_image is not None:
-        console.print("[bold]Docker image profile generated[/bold]")
-        console.print(f"[bold]Image:[/bold] {from_image}")
-        if runtime_preset is not None:
-            console.print(f"[bold]Runtime preset:[/bold] {runtime_preset}")
-        console.print(f"[bold]Name:[/bold] {profile.id}")
-        console.print(f"[bold]Architecture:[/bold] {profile.arch}")
-        console.print(f"[bold]OS:[/bold] {profile.name}")
-        console.print(f"[bold]Output:[/bold] {output}")
-    else:
-        console.print(f"[bold]Profile:[/bold] {output}")
-        console.print("[bold]Status:[/bold] generated")
-        console.print(f"[bold]Target:[/bold] {profile.id}")
-        console.print(f"[bold]Architecture:[/bold] {profile.arch}")
+    services.profiles().generate(
+        from_current=from_current,
+        from_image=from_image,
+        platform=platform,
+        pull=pull,
+        runtime_preset=runtime_preset,
+        name=name,
+        output=output,
+    )
 
 
 @profiles_app.command("validate")
@@ -508,85 +256,7 @@ def profiles_validate(
     ] = None,
 ) -> None:
     """Validate a YAML target profile."""
-    try:
-        profile = load_profile_file(profile_file)
-    except (ProfileNotFoundError, ProfileLoadError) as exc:
-        if json_output is not None:
-            json_output.write_text(
-                json.dumps(
-                    {"profile": str(profile_file), "status": "invalid", "error": str(exc)},
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-        console.print(f"[bold]Profile:[/bold] {profile_file}")
-        console.print("[bold]Status:[/bold] [red]invalid[/red]")
-        console.print(f"[bold]Error:[/bold] {exc}")
-        raise typer.Exit(2) from exc
-
-    if json_output is not None:
-        json_output.write_text(
-            json.dumps(
-                {
-                    "profile": str(profile_file),
-                    "status": "valid",
-                    "target": profile.id,
-                    "architecture": profile.arch,
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-    console.print(f"[bold]Profile:[/bold] {profile_file}")
-    console.print("[bold]Status:[/bold] [green]valid[/green]")
-    console.print(f"[bold]Target:[/bold] {profile.id}")
-    console.print(f"[bold]Architecture:[/bold] {profile.arch}")
-
-
-def _write_system_facts_json(facts: SystemFacts, path: Path) -> None:
-    path.write_text(facts.model_dump_json(indent=2) + "\n", encoding="utf-8")
-
-
-def _write_target_profile_yaml(profile: TargetProfile, path: Path) -> None:
-    raw = profile.model_dump(mode="json", exclude_none=True)
-    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-
-
-def _render_system_facts(facts: SystemFacts) -> None:
-    console.print("[bold]System profile detected[/bold]")
-    console.print(
-        f"[bold]OS:[/bold] {facts.os_release.pretty_name or facts.os_release.id or 'unknown'}"
-    )
-    console.print(f"[bold]Architecture:[/bold] {facts.architecture or 'unknown'}")
-    console.print(f"[bold]glibc:[/bold] {facts.glibc_version or 'unknown'}")
-    console.print(f"[bold]GLIBC max:[/bold] {_last_or_unknown(facts.symbol_versions.glibc)}")
-    console.print(f"[bold]GLIBCXX max:[/bold] {_last_or_unknown(facts.symbol_versions.glibcxx)}")
-    console.print(f"[bold]CXXABI max:[/bold] {_last_or_unknown(facts.symbol_versions.cxxabi)}")
-    console.print(f"[bold]Interpreters:[/bold] {len(facts.dynamic_linkers)}")
-    console.print(f"[bold]Libraries:[/bold] {len(facts.libraries)}")
-    console.print(f"[bold]Warnings:[/bold] {len(facts.warnings)}")
-
-
-def _render_runtime_preset(preset: RuntimePreset) -> None:
-    console.print(f"[bold]Runtime preset:[/bold] {preset.name}")
-    console.print(f"[bold]Description:[/bold] {preset.description}")
-    console.print(f"[bold]Package managers:[/bold] {', '.join(preset.supported_package_managers)}")
-    console.print("[bold]Packages:[/bold]")
-    for manager in preset.supported_package_managers:
-        packages = preset.packages_by_manager.get(manager, [])
-        console.print(f"  {manager}: {', '.join(packages)}")
-    if preset.limitations:
-        console.print("[bold]Limitations:[/bold]")
-        for limitation in preset.limitations:
-            console.print(f"  {limitation}")
-
-
-def _last_or_unknown(values: list[str]) -> str:
-    if not values:
-        return "unknown"
-    return values[-1]
+    services.profiles().validate(profile_file=profile_file, json_output=json_output)
 
 
 if __name__ == "__main__":

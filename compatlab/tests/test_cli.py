@@ -182,7 +182,7 @@ def test_scan_command_writes_bundle_dependency_graph(
     )
 
     monkeypatch.setattr(
-        "compatlab.src.cli.resolve_bundle_dependencies",
+        "compatlab.src.bundle.resolver.resolve_bundle_dependencies",
         lambda *args, **kwargs: BundleResolutionResult(graph=graph, reports={}, warnings=[]),
     )
 
@@ -324,7 +324,7 @@ def test_compare_command_fail_on_warning_returns_nonzero(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.cli.scan_path",
+        "compatlab.src.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -361,7 +361,7 @@ def test_compare_command_fail_on_never_writes_diagnostic_json(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.cli.scan_path",
+        "compatlab.src.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -419,7 +419,7 @@ def test_compare_command_fail_on_never_writes_html_and_returns_zero(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.cli.scan_path",
+        "compatlab.src.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -458,7 +458,7 @@ def test_compare_command_fail_on_error_writes_html_before_nonzero_exit(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.cli.scan_path",
+        "compatlab.src.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -499,7 +499,7 @@ def test_compare_command_writes_json_and_html_together(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.cli.scan_path",
+        "compatlab.src.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
@@ -570,7 +570,10 @@ def test_profiles_detect_writes_raw_facts_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "system-facts.json"
-    monkeypatch.setattr("compatlab.src.cli.detect_current_system", _system_facts)
+    monkeypatch.setattr(
+        "compatlab.src.profile.detect.detect_current_system",
+        _system_facts
+    )
 
     result = runner.invoke(app, ["profiles", "detect", "--json", str(output)])
 
@@ -593,7 +596,10 @@ def test_profiles_detect_from_image_writes_raw_facts_json(
         assert kwargs["pull"] is True
         return _docker_facts()
 
-    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+    monkeypatch.setattr(
+        "compatlab.src.profile.docker_image.detect_docker_image_system",
+        fake_detect
+    )
 
     result = runner.invoke(
         app,
@@ -626,7 +632,10 @@ def test_profiles_detect_from_image_with_runtime_preset_writes_runtime_facts(
         assert kwargs["runtime_preset"] == "cpp-runtime"
         return _docker_runtime_facts()
 
-    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+    monkeypatch.setattr(
+        "compatlab.src.profile.docker_image.detect_docker_image_system",
+        fake_detect
+    )
 
     result = runner.invoke(
         app,
@@ -660,7 +669,10 @@ def test_profiles_generate_writes_loadable_yaml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "local.yaml"
-    monkeypatch.setattr("compatlab.src.cli.detect_current_system", _system_facts)
+    monkeypatch.setattr(
+        "compatlab.src.profile.detect.detect_current_system",
+        _system_facts
+    )
 
     result = runner.invoke(
         app,
