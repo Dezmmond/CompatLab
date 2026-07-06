@@ -1,42 +1,42 @@
-from pathlib import Path
 import json
+from pathlib import Path
 
-import typer
-from rich.console import Console
 import yaml
+from rich.console import Console
 
-from compatlab.src.profile.detect import detect_current_system
-from compatlab.src.profile.docker_cli import DockerError
-from compatlab.src.profile.docker_image import detect_docker_image_system
-from compatlab.src.profile.generate import generate_target_profile_from_facts
-from compatlab.src.profile.loader import (
+import compatlab.profile.detect as profile_detect
+import compatlab.profile.docker_image as docker_image
+import compatlab.profile.loader as profile_loader
+from compatlab.models import SystemFacts, TargetProfile
+from compatlab.profile.docker_cli import DockerError
+from compatlab.profile.generate import generate_target_profile_from_facts
+from compatlab.profile.loader import (
     ProfileLoadError,
     ProfileNotFoundError,
-    list_builtin_profiles,
-    load_profile_file,
-    load_target_profile,
 )
-from compatlab.src.profile.models import SystemFacts, TargetProfile
-from compatlab.src.profile.runtime_presets import (
+from compatlab.profile.runtime_presets import (
     RuntimePreset,
     RuntimePresetError,
     get_runtime_preset,
     list_runtime_presets,
 )
-from compatlab.src.report.pretty import render_profiles
+from compatlab.report.pretty import render_profiles
+from compatlab.services.exceptions import CommandExit
 
 
 class ProfileFileWriter:
-    def write_system_facts_json(self, facts: SystemFacts, path: Path) -> None:
+    @staticmethod
+    def write_system_facts_json(facts: SystemFacts, path: Path) -> None:
         path.write_text(facts.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
-    def write_target_profile_yaml(self, profile: TargetProfile, path: Path) -> None:
+    @staticmethod
+    def write_target_profile_yaml(profile: TargetProfile, path: Path) -> None:
         raw = profile.model_dump(mode="json", exclude_none=True)
         path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
+    @staticmethod
     def write_validation_json(
-        self,
-        path: Path,
+            path: Path,
         *,
         profile_file: Path,
         status: str,
@@ -78,7 +78,8 @@ class SystemFactsRenderer:
         self.console.print(f"[bold]Libraries:[/bold] {len(facts.libraries)}")
         self.console.print(f"[bold]Warnings:[/bold] {len(facts.warnings)}")
 
-    def _last_or_unknown(self, values: list[str]) -> str:
+    @staticmethod
+    def _last_or_unknown(values: list[str]) -> str:
         if not values:
             return "unknown"
         return values[-1]
@@ -120,14 +121,14 @@ class ProfileCommandService:
         self.runtime_renderer = runtime_renderer or RuntimePresetRenderer(console)
 
     def list_profiles(self) -> None:
-        render_profiles(list_builtin_profiles(), self.console)
+        render_profiles(profile_loader.list_builtin_profiles(), self.console)
 
     def show_profile(self, target: str) -> None:
         try:
-            profile = load_target_profile(target)
+            profile = profile_loader.load_target_profile(target)
         except ProfileNotFoundError as exc:
             self.console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
         self.console.print_json(profile.model_dump_json(indent=2))
 
     def list_runtime_presets(self) -> None:
@@ -140,7 +141,7 @@ class ProfileCommandService:
             preset = get_runtime_preset(name)
         except RuntimePresetError as exc:
             self.console.print(f"[red]Error: {exc}[/red]")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
         self.runtime_renderer.render(preset)
 
     def detect(
@@ -176,11 +177,11 @@ class ProfileCommandService:
     ) -> None:
         if from_current == (from_image is not None):
             self.console.print("[red]Provide exactly one of --from-current or --from-image.[/red]")
-            raise typer.Exit(2)
+            raise CommandExit(2)
         self._validate_runtime_preset_source(from_image, runtime_preset)
         if output is None:
             self.console.print("[red]--output is required.[/red]")
-            raise typer.Exit(2)
+            raise CommandExit(2)
 
         facts = self._detect_facts(
             from_image=from_image,
@@ -199,7 +200,7 @@ class ProfileCommandService:
 
     def validate(self, *, profile_file: Path, json_output: Path | None) -> None:
         try:
-            profile = load_profile_file(profile_file)
+            profile = profile_loader.load_profile_file(profile_file)
         except (ProfileNotFoundError, ProfileLoadError) as exc:
             if json_output is not None:
                 self.files.write_validation_json(
@@ -211,7 +212,7 @@ class ProfileCommandService:
             self.console.print(f"[bold]Profile:[/bold] {profile_file}")
             self.console.print("[bold]Status:[/bold] [red]invalid[/red]")
             self.console.print(f"[bold]Error:[/bold] {exc}")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
 
         if json_output is not None:
             self.files.write_validation_json(
@@ -236,23 +237,23 @@ class ProfileCommandService:
     ) -> SystemFacts:
         try:
             if from_image is not None:
-                return detect_docker_image_system(
+                return docker_image.detect_docker_image_system(
                     from_image,
                     platform=platform,
                     pull=pull,
                     runtime_preset=runtime_preset,
                 )
-            return detect_current_system()
+            return profile_detect.detect_current_system()
         except (DockerError, RuntimePresetError) as exc:
             self.console.print(f"[red]Error: {exc}[/red]")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
 
     def _validate_runtime_preset_source(
         self, from_image: str | None, runtime_preset: str | None
     ) -> None:
         if runtime_preset is not None and from_image is None:
             self.console.print("[red]--runtime-preset is valid only with --from-image.[/red]")
-            raise typer.Exit(2)
+            raise CommandExit(2)
 
     def _render_generated_profile(
         self,
