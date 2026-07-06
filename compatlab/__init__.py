@@ -1,6 +1,6 @@
 """CompatLab ArtifactDoctor package."""
 
-__version__ = "0.1.0"
+__version__ = "1.1.0"
 
 from compatlab import (
     artifact,
@@ -34,6 +34,8 @@ from compatlab.models import (
     SymbolVersionFacts,
     SystemFacts,
     TargetProfile,
+    WheelNativeEntry,
+    WheelPackageMetadata,
 )
 
 __all__ = [
@@ -58,6 +60,8 @@ __all__ = [
     "SymbolVersionFacts",
     "SystemFacts",
     "TargetProfile",
+    "WheelNativeEntry",
+    "WheelPackageMetadata",
     "artifact",
     "bundle",
     "compare",

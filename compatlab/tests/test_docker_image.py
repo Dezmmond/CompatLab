@@ -91,7 +91,7 @@ def test_detect_docker_image_system_with_runtime_preset_exports_runtime_rootfs(
 
         @staticmethod
         def export_image_rootfs(
-                image: str,
+            image: str,
             output: Path,
             *,
             platform: str | None = None,

@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 
 
-
 class DiagnosticSeverity(str, Enum):
     INFO = "info"
     WARNING = "warning"
@@ -21,6 +20,7 @@ class DiagnosticCategory(str, Enum):
     LOADER = "loader"
     RPATH = "rpath"
     LIMITS = "limits"
+    PACKAGE = "package"
 
 
 class DiagnosticIssue(BaseModel):
@@ -80,7 +80,6 @@ class DependencyGraph(BaseModel):
     nodes: list[DependencyNode] = Field(default_factory=list)
     edges: list[DependencyEdge] = Field(default_factory=list)
     unresolved_dependencies: list[DependencyEdge] = Field(default_factory=list)
-
 
 
 class SymbolVersion(BaseModel):
@@ -205,11 +204,34 @@ class ArtifactInfo(BaseModel):
     sha256: str | None = None
 
 
+class WheelPackageMetadata(BaseModel):
+    type: Literal["wheel"] = "wheel"
+    name: str | None = None
+    version: str | None = None
+    build: str | None = None
+    generator: str | None = None
+    root_is_purelib: bool | None = None
+    tags: list[str] = Field(default_factory=list)
+    dist_info_dir: str | None = None
+
+
+class WheelNativeEntry(BaseModel):
+    path: str
+    size: int | None = None
+    elf: ElfInfo | None = None
+    diagnostics: list[DiagnosticIssue] = Field(default_factory=list)
+    summary: DiagnosticSummary = Field(default_factory=DiagnosticSummary)
+    problems: list[Problem] = Field(default_factory=list)
+    warnings: list[Problem] = Field(default_factory=list)
+
+
 class ArtifactReport(BaseModel):
     schema_version: str = "0.1"
     tool: str = "compatlab"
     artifact: ArtifactInfo
     elf: ElfInfo | None = None
+    package: WheelPackageMetadata | None = None
+    native_entries: list[WheelNativeEntry] = Field(default_factory=list)
     target: TargetProfile | None = None
     summary: DiagnosticSummary = Field(default_factory=DiagnosticSummary)
     diagnostics: list[DiagnosticIssue] = Field(default_factory=list)
@@ -220,4 +242,3 @@ class ArtifactReport(BaseModel):
     @property
     def is_compatible(self) -> bool:
         return not any(problem.severity in {"CRITICAL", "HIGH"} for problem in self.problems)
-
