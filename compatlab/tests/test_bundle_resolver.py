@@ -1,10 +1,17 @@
 from pathlib import Path
 
-from compatlab.src.bundle.models import DependencyResolutionKind
-from compatlab.src.bundle.resolver import resolve_bundle_dependencies
-from compatlab.src.elfscan.models import ElfInfo, SymbolVersion
-from compatlab.src.profile.models import LibcProfile, ProvidedLibrary, TargetProfile
-from compatlab.src.report.models import ArtifactInfo, ArtifactReport
+from compatlab.models import (
+    ArtifactInfo,
+    ArtifactReport,
+    DependencyResolutionKind,
+    ElfInfo,
+    LibcProfile,
+    ProvidedLibrary,
+    SymbolVersion,
+    TargetProfile,
+)
+
+from compatlab.bundle import resolve_bundle_dependencies
 
 
 def _report(path: Path, elf: ElfInfo) -> ArtifactReport:
@@ -51,7 +58,7 @@ def test_resolves_origin_runpath_and_recursive_dependencies(tmp_path: Path, monk
             ),
         )
 
-    monkeypatch.setattr("compatlab.src.bundle.resolver.scan_path", fake_scan)
+    monkeypatch.setattr("compatlab.bundle.resolver.scan_path", fake_scan)
 
     result = resolve_bundle_dependencies(app, bundle, target=_profile(), recursive=True)
 
@@ -74,7 +81,7 @@ def test_non_recursive_scan_includes_direct_bundled_nodes(tmp_path: Path, monkey
             return _report(path, ElfInfo(needed=["libfoo.so"]))
         return _report(path, ElfInfo(needed=["libtransitive.so"]))
 
-    monkeypatch.setattr("compatlab.src.bundle.resolver.scan_path", fake_scan)
+    monkeypatch.setattr("compatlab.bundle.resolver.scan_path", fake_scan)
 
     result = resolve_bundle_dependencies(app, bundle, target=_profile(), recursive=False)
 
@@ -94,7 +101,7 @@ def test_marks_ambiguous_and_missing_dependencies(tmp_path: Path, monkeypatch) -
     second.write_bytes(b"dup2")
 
     monkeypatch.setattr(
-        "compatlab.src.bundle.resolver.scan_path",
+        "compatlab.bundle.resolver.scan_path",
         lambda path: _report(path, ElfInfo(needed=["libdup.so", "libmissing.so"])),
     )
 
@@ -116,7 +123,7 @@ def test_warns_for_runtime_paths_that_escape_bundle_or_use_unknown_tokens(
     app.write_bytes(b"app")
 
     monkeypatch.setattr(
-        "compatlab.src.bundle.resolver.scan_path",
+        "compatlab.bundle.resolver.scan_path",
         lambda path: _report(
             path,
             ElfInfo(runpath=["$ORIGIN/../../outside:$LIB"]),

@@ -1,18 +1,21 @@
-from compatlab.src.compare.engine import (
+from compatlab.models import (
+    ArtifactInfo,
+    ArtifactReport,
+    ElfInfo,
+    LibcProfile,
+    LibstdcxxProfile,
+    ProvidedLibrary,
+    SymbolVersion,
+    TargetProfile,
+)
+
+from compatlab.compare import (
     compare_report,
     is_version_newer,
     max_required_version,
     normalize_architecture,
     parse_version_tuple,
 )
-from compatlab.src.elfscan.models import ElfInfo, SymbolVersion
-from compatlab.src.profile.models import (
-    LibcProfile,
-    LibstdcxxProfile,
-    ProvidedLibrary,
-    TargetProfile,
-)
-from compatlab.src.report.models import ArtifactInfo, ArtifactReport
 
 
 def _version(namespace: str, version: str) -> SymbolVersion:

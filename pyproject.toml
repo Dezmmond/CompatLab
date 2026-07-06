@@ -5,14 +5,14 @@ description = "Preflight compatibility checker for Linux binary artifacts"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "typer>=0.12",
     "rich>=13.0",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "setuptools (>=82.0.1,<83.0.0)",
 ]
 
 [project.scripts]
-compatlab = "compatlab.src.cli:app"
+compatlab = "compatlab.cli:main"
 
 [build-system]
 requires = ["hatchling"]

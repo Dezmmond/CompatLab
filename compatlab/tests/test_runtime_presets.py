@@ -1,11 +1,11 @@
+import tarfile
 from io import BytesIO
 from pathlib import Path
-import tarfile
 
 import pytest
+from compatlab.models import OsReleaseFacts
 
-from compatlab.src.profile.models import OsReleaseFacts
-from compatlab.src.profile.runtime_presets import (
+from compatlab.profile.runtimes import (
     RuntimePresetError,
     build_install_script,
     detect_package_manager,

@@ -1,12 +1,11 @@
 from pathlib import Path
 
-from compatlab.src.elfscan.parsers import (
+from compatlab.elfscan import (
     parse_dynamic_section,
     parse_elf_header,
     parse_program_headers,
     parse_version_info,
 )
-
 
 FIXTURES = Path(__file__).parent / "fixtures" / "readelf"
 

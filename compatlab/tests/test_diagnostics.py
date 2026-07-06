@@ -1,16 +1,20 @@
 from pathlib import Path
 
-from compatlab.src.bundle.models import DependencyEdge, DependencyGraph, DependencyResolutionKind
-from compatlab.src.diagnostics import (
-    DiagnosticCategory,
-    DiagnosticIssue,
-    DiagnosticSeverity,
+from compatlab.diagnostics import (
     FailOn,
     diagnostics_from_report_parts,
     should_fail_for_diagnostics,
     summarize_diagnostics,
 )
-from compatlab.src.problem.models import Problem
+from compatlab.models import (
+    DependencyEdge,
+    DependencyGraph,
+    DependencyResolutionKind,
+    DiagnosticCategory,
+    DiagnosticIssue,
+    DiagnosticSeverity,
+    Problem,
+)
 
 
 def test_diagnostic_issue_serializes_stable_enum_values() -> None:
