@@ -1,27 +1,26 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-import typer
 from rich.console import Console
 
-from compatlab.src.bundle.resolver import (
+import compatlab.bundle.resolver as bundle_resolver
+import compatlab.elfscan.scanner as elf_scanner
+import compatlab.profile.loader as profile_loader
+from compatlab.bundle.resolver import (
     BundleResolutionError,
-    resolve_bundle_dependencies,
 )
-from compatlab.src.compare.engine import compare_report as comparator
-from compatlab.src.diagnostics import (
+from compatlab.compare.engine import compare_report as comparator
+from compatlab.diagnostics import (
     FailOn,
-    should_fail_for_diagnostics
+    should_fail_for_diagnostics,
 )
-from compatlab.src.elfscan.scanner import scan_path
-from compatlab.src.problem.models import Problem
-from compatlab.src.profile.loader import (
+from compatlab.models import Problem
+from compatlab.profile.loader import (
     ProfileLoadError,
     ProfileNotFoundError,
-    load_profile_file,
-    load_target_profile,
 )
-from compatlab.src.report.pretty import render_report
+from compatlab.report.pretty import render_report
+from compatlab.services.exceptions import CommandExit
 from .reports import (
     DependencyProblemFactory,
     DiagnosticsAugmenter,
@@ -74,10 +73,10 @@ class ArtifactCommandService:
         self.dependency_problems = dependency_problems or DependencyProblemFactory()
 
     def scan(self, options: ScanCommandOptions) -> None:
-        report = scan_path(options.path)
+        report = elf_scanner.scan_path(options.path)
         if options.bundle_root is not None:
             try:
-                resolution = resolve_bundle_dependencies(
+                resolution = bundle_resolver.resolve_bundle_dependencies(
                     options.path,
                     options.bundle_root,
                     recursive=options.recursive,
@@ -86,7 +85,7 @@ class ArtifactCommandService:
                 )
             except BundleResolutionError as exc:
                 self.console.print(f"[red]{exc}[/red]")
-                raise typer.Exit(2) from exc
+                raise CommandExit(2) from exc
             report = report.model_copy(
                 update={
                     "dependency_graph": resolution.graph,
@@ -108,7 +107,7 @@ class ArtifactCommandService:
 
     def compare(self, options: CompareCommandOptions) -> None:
         profile = self._load_profile(options)
-        scan_report = scan_path(options.path)
+        scan_report = elf_scanner.scan_path(options.path)
         if self._scan_failed(scan_report):
             self._handle_scan_failure(scan_report, profile, options)
             return
@@ -136,17 +135,19 @@ class ArtifactCommandService:
     def _load_profile(self, options: CompareCommandOptions):
         if (options.target is None) == (options.target_file is None):
             self.console.print("[red]Provide exactly one of --target or --target-file.[/red]")
-            raise typer.Exit(2)
+            raise CommandExit(2)
 
         try:
             if options.target_file is not None:
-                return load_profile_file(options.target_file)
-            return load_target_profile(options.target or "")
+                return profile_loader.load_profile_file(options.target_file)
+            return profile_loader.load_target_profile(options.target or "")
         except (ProfileNotFoundError, ProfileLoadError) as exc:
             self.console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
 
-    def _scan_failed(self, report) -> bool:
+
+    @staticmethod
+    def _scan_failed(report) -> bool:
         return report.elf is None or report.elf.elf_class is None
 
     def _handle_scan_failure(self, scan_report, profile, options: CompareCommandOptions) -> None:
@@ -178,11 +179,11 @@ class ArtifactCommandService:
             ),
         )
         render_report(report, self.console)
-        raise typer.Exit(2)
+        raise CommandExit(2)
 
     def _compare_bundle(self, scan_report, profile, options: CompareCommandOptions):
         try:
-            resolution = resolve_bundle_dependencies(
+            resolution = bundle_resolver.resolve_bundle_dependencies(
                 options.path,
                 options.bundle_root,
                 target=profile,
@@ -192,7 +193,7 @@ class ArtifactCommandService:
             )
         except BundleResolutionError as exc:
             self.console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
 
         bundled_libraries = resolution.bundled_library_names
         report = comparator(
@@ -220,6 +221,7 @@ class ArtifactCommandService:
             }
         )
 
-    def _exit_for_diagnostics(self, report, fail_on: FailOn) -> None:
+    @staticmethod
+    def _exit_for_diagnostics(report, fail_on: FailOn) -> None:
         if should_fail_for_diagnostics(report.diagnostics, fail_on):
-            raise typer.Exit(1)
+            raise CommandExit(1)
