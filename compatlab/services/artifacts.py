@@ -5,7 +5,7 @@ from rich.console import Console
 
 import compatlab.bundle.resolver as bundle_resolver
 import compatlab.elfscan.scanner as elf_scanner
-import compatlab.profile.loader as profile_loader
+import compatlab.profile.catalog as profile_catalog
 from compatlab.bundle.resolver import (
     BundleResolutionError,
 )
@@ -15,7 +15,7 @@ from compatlab.diagnostics import (
     should_fail_for_diagnostics,
 )
 from compatlab.models import Problem
-from compatlab.profile.loader import (
+from compatlab.profile.catalog import (
     ProfileLoadError,
     ProfileNotFoundError,
 )
@@ -139,8 +139,8 @@ class ArtifactCommandService:
 
         try:
             if options.target_file is not None:
-                return profile_loader.load_profile_file(options.target_file)
-            return profile_loader.load_target_profile(options.target or "")
+                return profile_catalog.load_profile_file(options.target_file)
+            return profile_catalog.load_target_profile(options.target or "")
         except (ProfileNotFoundError, ProfileLoadError) as exc:
             self.console.print(f"[red]{exc}[/red]")
             raise CommandExit(2) from exc

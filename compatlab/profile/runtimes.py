@@ -1,7 +1,9 @@
+"""Runtime package presets used when probing container images."""
+
 from pydantic import BaseModel, Field
 
-from compatlab.src.profile.models import OsReleaseFacts
-from compatlab.src.profile.rootfs_tar import parse_os_release_from_tar, path_exists
+from compatlab.models import OsReleaseFacts
+from compatlab.profile.rootfs import parse_os_release_from_tar, path_exists
 
 
 SUPPORTED_PACKAGE_MANAGERS = ("apt-get", "dnf", "yum")

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from compatlab.models import OsReleaseFacts
 
-from compatlab.profile.runtime_presets import (
+from compatlab.profile.runtimes import (
     RuntimePresetError,
     build_install_script,
     detect_package_manager,

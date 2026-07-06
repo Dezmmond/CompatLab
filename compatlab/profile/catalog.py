@@ -1,11 +1,12 @@
-from pathlib import Path
-from typing import Any
+"""Load built-in and external target profile YAML files."""
 
-from pydantic import ValidationError
 import yaml
 
-from compatlab.src.profile.builtin import builtin_profiles_dir
-from compatlab.src.profile.models import TargetProfile
+from pathlib import Path
+from pydantic import ValidationError
+from typing import Any
+
+from compatlab.models import TargetProfile
 
 
 class ProfileNotFoundError(ValueError):
@@ -14,6 +15,15 @@ class ProfileNotFoundError(ValueError):
 
 class ProfileLoadError(ValueError):
     pass
+
+
+def builtin_profiles_dir() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "profiles"
+        if candidate.is_dir():
+            return candidate
+    return current.parents[2] / "profiles"
 
 
 def list_builtin_profiles() -> list[TargetProfile]:

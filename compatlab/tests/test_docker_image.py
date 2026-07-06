@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from compatlab.elfscan.command import CommandResult
-from compatlab.profile.docker_cli import DockerImageMetadata
-from compatlab.profile.docker_image import (
+from compatlab.profile.docker import DockerImageMetadata
+from compatlab.profile.docker import (
     detect_docker_image_system,
     system_facts_from_rootfs_tar,
 )
@@ -47,7 +47,7 @@ def test_system_facts_from_rootfs_tar_uses_metadata_and_rootfs(
             args=["readelf", *args, str(path)], returncode=0, stdout=stdout, stderr=""
         )
 
-    monkeypatch.setattr("compatlab.profile.docker_image.run_readelf", fake_readelf)
+    monkeypatch.setattr("compatlab.profile.docker.run_readelf", fake_readelf)
 
     facts = system_facts_from_rootfs_tar(
         rootfs,
@@ -126,7 +126,7 @@ def test_detect_docker_image_system_with_runtime_preset_exports_runtime_rootfs(
         )
 
     client = FakeDockerClient()
-    monkeypatch.setattr("compatlab.profile.docker_image.run_readelf", fake_readelf)
+    monkeypatch.setattr("compatlab.profile.docker.run_readelf", fake_readelf)
 
     facts = detect_docker_image_system(
         "ubuntu:22.04",

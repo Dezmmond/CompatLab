@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from compatlab.elfscan.command import CommandResult
-from compatlab.profile.docker_cli import DockerClient, DockerError
+from compatlab.profile.docker import DockerClient, DockerError
 
 
 class FakeRunner:

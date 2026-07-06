@@ -4,17 +4,17 @@ from pathlib import Path
 import yaml
 from rich.console import Console
 
-import compatlab.profile.detect as profile_detect
-import compatlab.profile.docker_image as docker_image
-import compatlab.profile.loader as profile_loader
+import compatlab.profile.catalog as profile_catalog
+import compatlab.profile.docker as docker_profiles
+import compatlab.profile.local as local_profiles
 from compatlab.models import SystemFacts, TargetProfile
-from compatlab.profile.docker_cli import DockerError
-from compatlab.profile.generate import generate_target_profile_from_facts
-from compatlab.profile.loader import (
+from compatlab.profile.docker import DockerError
+from compatlab.profile.builder import generate_target_profile_from_facts
+from compatlab.profile.catalog import (
     ProfileLoadError,
     ProfileNotFoundError,
 )
-from compatlab.profile.runtime_presets import (
+from compatlab.profile.runtimes import (
     RuntimePreset,
     RuntimePresetError,
     get_runtime_preset,
@@ -121,11 +121,11 @@ class ProfileCommandService:
         self.runtime_renderer = runtime_renderer or RuntimePresetRenderer(console)
 
     def list_profiles(self) -> None:
-        render_profiles(profile_loader.list_builtin_profiles(), self.console)
+        render_profiles(profile_catalog.list_builtin_profiles(), self.console)
 
     def show_profile(self, target: str) -> None:
         try:
-            profile = profile_loader.load_target_profile(target)
+            profile = profile_catalog.load_target_profile(target)
         except ProfileNotFoundError as exc:
             self.console.print(f"[red]{exc}[/red]")
             raise CommandExit(2) from exc
@@ -200,7 +200,7 @@ class ProfileCommandService:
 
     def validate(self, *, profile_file: Path, json_output: Path | None) -> None:
         try:
-            profile = profile_loader.load_profile_file(profile_file)
+            profile = profile_catalog.load_profile_file(profile_file)
         except (ProfileNotFoundError, ProfileLoadError) as exc:
             if json_output is not None:
                 self.files.write_validation_json(
@@ -237,13 +237,13 @@ class ProfileCommandService:
     ) -> SystemFacts:
         try:
             if from_image is not None:
-                return docker_image.detect_docker_image_system(
+                return docker_profiles.detect_docker_image_system(
                     from_image,
                     platform=platform,
                     pull=pull,
                     runtime_preset=runtime_preset,
                 )
-            return profile_detect.detect_current_system()
+            return local_profiles.detect_current_system()
         except (DockerError, RuntimePresetError) as exc:
             self.console.print(f"[red]Error: {exc}[/red]")
             raise CommandExit(2) from exc

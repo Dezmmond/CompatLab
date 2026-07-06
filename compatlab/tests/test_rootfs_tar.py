@@ -2,7 +2,7 @@ import tarfile
 from io import BytesIO
 from pathlib import Path
 
-from compatlab.profile.rootfs_tar import (
+from compatlab.profile.rootfs import (
     detect_dynamic_linkers_in_tar,
     extract_member_to_directory,
     list_libraries,

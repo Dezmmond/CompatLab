@@ -1,11 +1,13 @@
-from dataclasses import dataclass
-from pathlib import PurePosixPath
+"""Read and inspect Linux rootfs tar archives."""
+
 import shutil
 import tarfile
 
-from compatlab.src.profile.linkers import KNOWN_DYNAMIC_LINKERS
-from compatlab.src.profile.models import LibraryFact, OsReleaseFacts
-from compatlab.src.profile.os_release import parse_os_release
+from dataclasses import dataclass
+from pathlib import PurePosixPath
+
+from compatlab.models import LibraryFact, OsReleaseFacts
+from compatlab.profile.parsers import KNOWN_DYNAMIC_LINKERS, parse_os_release
 
 
 COMMON_LIBRARY_DIRS = (

@@ -1,3 +1,5 @@
+"""Profile detection, generation, loading, and runtime helpers."""
+
 from compatlab.models import (
     FactWarning,
     LibcProfile,
@@ -10,29 +12,36 @@ from compatlab.models import (
     SystemFacts,
     TargetProfile,
 )
-from compatlab.profile.builtin import builtin_profiles_dir
-from compatlab.profile.detect import CurrentSystemDetector, detect_current_system
-from compatlab.profile.docker_cli import (
-    DockerClient,
-    DockerError,
-    DockerImageMetadata,
-    parse_image_inspect,
-)
-from compatlab.profile.docker_image import detect_docker_image_system, system_facts_from_rootfs_tar
-from compatlab.profile.generate import TargetProfileGenerator, generate_target_profile_from_facts
-from compatlab.profile.ldconfig import LdconfigCacheParser, parse_ldconfig_cache
-from compatlab.profile.ldd import LddVersionParser, parse_ldd_glibc_version
-from compatlab.profile.linkers import KNOWN_DYNAMIC_LINKERS, detect_dynamic_linkers
-from compatlab.profile.loader import (
+from compatlab.profile.builder import TargetProfileGenerator, generate_target_profile_from_facts
+from compatlab.profile.catalog import (
     ProfileLoadError,
     ProfileNotFoundError,
+    builtin_profiles_dir,
     list_builtin_profiles,
     load_profile,
     load_profile_file,
     load_target_profile,
 )
-from compatlab.profile.os_release import OsReleaseParser, parse_os_release
-from compatlab.profile.rootfs_tar import (
+from compatlab.profile.docker import (
+    DockerClient,
+    DockerError,
+    DockerImageMetadata,
+    detect_docker_image_system,
+    parse_image_inspect,
+    system_facts_from_rootfs_tar,
+)
+from compatlab.profile.local import CurrentSystemDetector, detect_current_system
+from compatlab.profile.parsers import (
+    KNOWN_DYNAMIC_LINKERS,
+    LdconfigCacheParser,
+    LddVersionParser,
+    OsReleaseParser,
+    detect_dynamic_linkers,
+    parse_ldconfig_cache,
+    parse_ldd_glibc_version,
+    parse_os_release,
+)
+from compatlab.profile.rootfs import (
     CANDIDATE_SYMBOL_LIBRARIES,
     COMMON_LIBRARY_DIRS,
     RootfsLibraryCandidate,
@@ -44,7 +53,7 @@ from compatlab.profile.rootfs_tar import (
     path_exists,
     read_text_file,
 )
-from compatlab.profile.runtime_presets import (
+from compatlab.profile.runtimes import (
     PACKAGE_MANAGER_BY_OS_ID,
     PACKAGE_MANAGER_PATHS,
     SUPPORTED_PACKAGE_MANAGERS,

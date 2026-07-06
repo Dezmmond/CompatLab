@@ -1,7 +1,9 @@
+"""Build target profile documents from detected system facts."""
+
 from datetime import UTC, datetime
 
-from compatlab.src.compare.engine import parse_version_tuple
-from compatlab.src.profile.models import (
+from compatlab.compare.engine import parse_version_tuple
+from compatlab.models import (
     LibcProfile,
     LibstdcxxProfile,
     ProfileMetadata,
@@ -56,19 +58,22 @@ class TargetProfileGenerator:
             package_manager=facts.package_manager,
         )
 
-    def _profile_name(self, facts: SystemFacts, name: str) -> str:
+    @staticmethod
+    def _profile_name(facts: SystemFacts, name: str) -> str:
         if facts.os_release.pretty_name:
             return facts.os_release.pretty_name
         return name
 
-    def _metadata_source(self, facts: SystemFacts) -> str:
+    @staticmethod
+    def _metadata_source(facts: SystemFacts) -> str:
         if facts.source_image is None:
             return "current-system"
         if facts.runtime_preset is not None:
             return "docker-runtime-image"
         return "docker-image"
 
-    def _detection_backend(self, facts: SystemFacts) -> str:
+    @staticmethod
+    def _detection_backend(facts: SystemFacts) -> str:
         if facts.source_image is None:
             return "local-system"
         if facts.runtime_preset is not None:
@@ -78,7 +83,8 @@ class TargetProfileGenerator:
     def _max_or_detected(self, versions: list[str], facts: SystemFacts) -> str:
         return self._max_version(versions) or facts.glibc_version or "0"
 
-    def _max_version(self, versions: list[str]) -> str | None:
+    @staticmethod
+    def _max_version(versions: list[str]) -> str | None:
         if not versions:
             return None
         return max(versions, key=parse_version_tuple)

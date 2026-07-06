@@ -7,7 +7,7 @@ from compatlab.models import (
     SymbolVersionFacts,
 )
 
-from compatlab.profile.generate import generate_target_profile_from_facts
+from compatlab.profile.builder import generate_target_profile_from_facts
 
 
 def test_generate_target_profile_from_facts_maps_detected_values() -> None:

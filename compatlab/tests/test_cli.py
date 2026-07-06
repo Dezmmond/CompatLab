@@ -21,8 +21,8 @@ from compatlab.models import (
 
 from compatlab.bundle import BundleResolutionResult
 from compatlab.cli import app
-from compatlab.profile.docker_cli import DockerError
-from compatlab.profile.loader import load_profile_file
+from compatlab.profile.docker import DockerError
+from compatlab.profile.catalog import load_profile_file
 
 
 @dataclass(frozen=True)
@@ -597,7 +597,7 @@ def test_profiles_detect_writes_raw_facts_json(
 ) -> None:
     output = tmp_path / "system-facts.json"
     monkeypatch.setattr(
-        "compatlab.profile.detect.detect_current_system",
+        "compatlab.profile.local.detect_current_system",
         _system_facts
     )
 
@@ -623,7 +623,7 @@ def test_profiles_detect_from_image_writes_raw_facts_json(
         return _docker_facts()
 
     monkeypatch.setattr(
-        "compatlab.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker.detect_docker_image_system",
         fake_detect
     )
 
@@ -659,7 +659,7 @@ def test_profiles_detect_from_image_with_runtime_preset_writes_runtime_facts(
         return _docker_runtime_facts()
 
     monkeypatch.setattr(
-        "compatlab.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker.detect_docker_image_system",
         fake_detect
     )
 
@@ -696,7 +696,7 @@ def test_profiles_generate_writes_loadable_yaml(
 ) -> None:
     output = tmp_path / "local.yaml"
     monkeypatch.setattr(
-        "compatlab.profile.detect.detect_current_system",
+        "compatlab.profile.local.detect_current_system",
         _system_facts
     )
 
@@ -727,7 +727,7 @@ def test_profiles_generate_from_image_writes_loadable_yaml(
         return _docker_facts()
 
     monkeypatch.setattr(
-        "compatlab.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker.detect_docker_image_system",
         fake_detect
     )
 
@@ -769,7 +769,7 @@ def test_profiles_generate_from_image_with_runtime_preset_writes_runtime_metadat
         return _docker_runtime_facts()
 
     monkeypatch.setattr(
-        "compatlab.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker.detect_docker_image_system",
         fake_detect
     )
 
@@ -842,7 +842,7 @@ def test_profiles_generate_from_image_reports_docker_error(
         raise DockerError("Docker is not available.")
 
     monkeypatch.setattr(
-        "compatlab.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker.detect_docker_image_system",
         fake_detect
     )
 
