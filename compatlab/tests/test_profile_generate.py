@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 
-from compatlab.src.profile.generate import generate_target_profile_from_facts
-from compatlab.src.profile.models import (
+from compatlab.models import (
     LibraryFact,
     OsReleaseFacts,
     SystemFacts,
     SymbolVersionFacts,
 )
+
+from compatlab.profile.generate import generate_target_profile_from_facts
 
 
 def test_generate_target_profile_from_facts_maps_detected_values() -> None:

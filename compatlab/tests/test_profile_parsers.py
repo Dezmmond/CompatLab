@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from compatlab.src.profile.ldconfig import parse_ldconfig_cache
-from compatlab.src.profile.ldd import parse_ldd_glibc_version
-from compatlab.src.profile.os_release import parse_os_release
-
+from compatlab.profile import parse_ldd_glibc_version
+from compatlab.profile.ldconfig import parse_ldconfig_cache
+from compatlab.profile.os_release import parse_os_release
 
 FIXTURES = Path(__file__).parent / "fixtures" / "profiles_detect"
 

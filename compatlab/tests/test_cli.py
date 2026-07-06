@@ -1,23 +1,49 @@
-from pathlib import Path
 import json
 import shutil
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import dataclass
+from io import StringIO
+from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
-
-from compatlab.src.cli import app
-from compatlab.src.bundle.models import DependencyEdge, DependencyGraph, DependencyResolutionKind
-from compatlab.src.bundle.resolver import BundleResolutionResult
-from compatlab.src.elfscan.models import ElfInfo
-from compatlab.src.profile.docker_cli import DockerError
-from compatlab.src.profile.loader import load_profile_file
-from compatlab.src.profile.models import (
+from compatlab.models import (
+    ArtifactInfo,
+    ArtifactReport,
+    DependencyEdge,
+    DependencyGraph,
+    DependencyResolutionKind,
+    ElfInfo,
     LibraryFact,
     OsReleaseFacts,
     SystemFacts,
     SymbolVersionFacts,
 )
-from compatlab.src.report.models import ArtifactInfo, ArtifactReport
+
+from compatlab.bundle import BundleResolutionResult
+from compatlab.cli import app
+from compatlab.profile.docker_cli import DockerError
+from compatlab.profile.loader import load_profile_file
+
+
+@dataclass(frozen=True)
+class CliResult:
+    exit_code: int
+    output: str
+
+
+class CliRunner:
+    @staticmethod
+    def invoke(cli_app, args: list[str]) -> CliResult:
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                cli_app(args)
+            except SystemExit as exc:
+                code = exc.code if isinstance(exc.code, int) else 1
+            else:
+                code = 0
+        return CliResult(exit_code=code, output=stdout.getvalue() + stderr.getvalue())
 
 
 runner = CliRunner()
@@ -182,7 +208,7 @@ def test_scan_command_writes_bundle_dependency_graph(
     )
 
     monkeypatch.setattr(
-        "compatlab.src.bundle.resolver.resolve_bundle_dependencies",
+        "compatlab.bundle.resolver.resolve_bundle_dependencies",
         lambda *args, **kwargs: BundleResolutionResult(graph=graph, reports={}, warnings=[]),
     )
 
@@ -324,7 +350,7 @@ def test_compare_command_fail_on_warning_returns_nonzero(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.elfscan.scanner.scan_path",
+        "compatlab.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -361,7 +387,7 @@ def test_compare_command_fail_on_never_writes_diagnostic_json(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.elfscan.scanner.scan_path",
+        "compatlab.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -419,7 +445,7 @@ def test_compare_command_fail_on_never_writes_html_and_returns_zero(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.elfscan.scanner.scan_path",
+        "compatlab.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -458,7 +484,7 @@ def test_compare_command_fail_on_error_writes_html_before_nonzero_exit(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.elfscan.scanner.scan_path",
+        "compatlab.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -499,7 +525,7 @@ def test_compare_command_writes_json_and_html_together(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.src.elfscan.scanner.scan_path",
+        "compatlab.elfscan.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
@@ -571,7 +597,7 @@ def test_profiles_detect_writes_raw_facts_json(
 ) -> None:
     output = tmp_path / "system-facts.json"
     monkeypatch.setattr(
-        "compatlab.src.profile.detect.detect_current_system",
+        "compatlab.profile.detect.detect_current_system",
         _system_facts
     )
 
@@ -597,7 +623,7 @@ def test_profiles_detect_from_image_writes_raw_facts_json(
         return _docker_facts()
 
     monkeypatch.setattr(
-        "compatlab.src.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker_image.detect_docker_image_system",
         fake_detect
     )
 
@@ -633,7 +659,7 @@ def test_profiles_detect_from_image_with_runtime_preset_writes_runtime_facts(
         return _docker_runtime_facts()
 
     monkeypatch.setattr(
-        "compatlab.src.profile.docker_image.detect_docker_image_system",
+        "compatlab.profile.docker_image.detect_docker_image_system",
         fake_detect
     )
 
@@ -670,7 +696,7 @@ def test_profiles_generate_writes_loadable_yaml(
 ) -> None:
     output = tmp_path / "local.yaml"
     monkeypatch.setattr(
-        "compatlab.src.profile.detect.detect_current_system",
+        "compatlab.profile.detect.detect_current_system",
         _system_facts
     )
 
@@ -700,7 +726,10 @@ def test_profiles_generate_from_image_writes_loadable_yaml(
         assert kwargs["pull"] is True
         return _docker_facts()
 
-    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+    monkeypatch.setattr(
+        "compatlab.profile.docker_image.detect_docker_image_system",
+        fake_detect
+    )
 
     result = runner.invoke(
         app,
@@ -739,7 +768,10 @@ def test_profiles_generate_from_image_with_runtime_preset_writes_runtime_metadat
         assert kwargs["runtime_preset"] == "cpp-runtime"
         return _docker_runtime_facts()
 
-    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+    monkeypatch.setattr(
+        "compatlab.profile.docker_image.detect_docker_image_system",
+        fake_detect
+    )
 
     result = runner.invoke(
         app,
@@ -809,7 +841,10 @@ def test_profiles_generate_from_image_reports_docker_error(
     def fake_detect(image: str, **kwargs: object) -> SystemFacts:
         raise DockerError("Docker is not available.")
 
-    monkeypatch.setattr("compatlab.src.cli.detect_docker_image_system", fake_detect)
+    monkeypatch.setattr(
+        "compatlab.profile.docker_image.detect_docker_image_system",
+        fake_detect
+    )
 
     result = runner.invoke(
         app,

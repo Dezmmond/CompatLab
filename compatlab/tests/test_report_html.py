@@ -1,17 +1,23 @@
 from datetime import UTC, datetime
 
-from compatlab.src.bundle.models import DependencyEdge, DependencyGraph, DependencyResolutionKind
-from compatlab.src.diagnostics import (
+from compatlab.diagnostics import summarize_diagnostics
+from compatlab.models import (
+    ArtifactInfo,
+    ArtifactReport,
+    DependencyEdge,
+    DependencyGraph,
+    DependencyResolutionKind,
     DiagnosticCategory,
     DiagnosticIssue,
     DiagnosticSeverity,
-    summarize_diagnostics,
+    ElfInfo,
+    LibcProfile,
+    LibstdcxxProfile,
+    Problem,
+    SymbolVersion,
+    TargetProfile,
 )
-from compatlab.src.elfscan.models import ElfInfo, SymbolVersion
-from compatlab.src.problem.models import Problem
-from compatlab.src.profile.models import LibcProfile, LibstdcxxProfile, TargetProfile
-from compatlab.src.report.html import HtmlReportContext, render_html_report
-from compatlab.src.report.models import ArtifactInfo, ArtifactReport
+from compatlab.report import HtmlReportContext, render_html_report
 
 
 def _context() -> HtmlReportContext:
