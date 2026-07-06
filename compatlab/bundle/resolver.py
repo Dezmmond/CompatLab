@@ -1,18 +1,17 @@
 from collections import deque
 from pathlib import Path
 
-from compatlab.src.bundle.models import (
+from compatlab.elfscan.scanner import scan_path
+from compatlab.models import (
     DependencyEdge,
     DependencyGraph,
     DependencyNode,
     DependencyResolutionKind,
+    SymbolVersion,
+    Problem,
+    TargetProfile,
+    ArtifactReport,
 )
-from compatlab.src.elfscan.models import SymbolVersion
-from compatlab.src.elfscan.scanner import scan_path
-from compatlab.src.problem.models import Problem
-from compatlab.src.profile.models import TargetProfile
-from compatlab.src.report.models import ArtifactReport
-
 
 DEFAULT_MAX_DEPTH = 10
 DEFAULT_MAX_FILES = 500
@@ -72,7 +71,8 @@ class BundleIndex:
 
 
 class RuntimePathExpander:
-    def expand(self, values: list[str], requester_path: Path) -> list[Path]:
+    @staticmethod
+    def expand(values: list[str], requester_path: Path) -> list[Path]:
         dirs: list[Path] = []
         origin = requester_path.parent
         for value in values:
@@ -165,7 +165,7 @@ class DependencyResolver:
             if _is_inside(path, self.bundle_root) and path.is_file():
                 candidates.append(path)
         candidates.extend(self.index.get(needed, []))
-        return sorted(set(candidates), key=lambda path: str(path))
+        return sorted(set(candidates), key=lambda _path: str(_path))
 
 
 class BundleResolver:

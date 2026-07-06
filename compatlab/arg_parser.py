@@ -3,7 +3,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from compatlab import __version__
-
 from compatlab.bundle.resolver import DEFAULT_MAX_DEPTH, DEFAULT_MAX_FILES
 from compatlab.diagnostics import FailOn
 from compatlab.services.artifacts import (
@@ -48,7 +47,7 @@ def fail_on_arg(value: str) -> FailOn:
     try:
         return FailOn(value)
     except ValueError as exc:
-        choices = ", ".join(item.value for item in FailOn)
+        choices = ", ".join(item for item in FailOn)
         raise argparse.ArgumentTypeError(
             f"invalid choice: {value!r} (choose from {choices})"
         ) from exc

@@ -1,7 +1,6 @@
 import re
 
-from compatlab.src.elfscan.models import SymbolVersion
-
+from compatlab.models import SymbolVersion
 
 _DYNAMIC_VALUE_RE = re.compile(r"\[(?P<value>[^\]]+)\]")
 _VERSION_RE = re.compile(
@@ -30,7 +29,8 @@ def _endianness(value: str) -> str | None:
 
 
 class ElfHeaderParser:
-    def parse(self, output: str) -> dict[str, str | None]:
+    @staticmethod
+    def parse(output: str) -> dict[str, str | None]:
         fields: dict[str, str | None] = {}
         for line in output.splitlines():
             parsed = _field_value(line)
@@ -65,7 +65,8 @@ class ProgramHeaderParser:
 
 
 class DynamicSectionParser:
-    def parse(self, output: str) -> dict[str, list[str] | bool]:
+    @staticmethod
+    def parse(output: str) -> dict[str, list[str] | bool]:
         needed: list[str] = []
         rpath: list[str] = []
         runpath: list[str] = []
@@ -100,7 +101,8 @@ class VersionInfoParser:
             versions[raw] = SymbolVersion(namespace=namespace, version=version, raw=raw)
         return sorted(versions.values(), key=self._sort_key)
 
-    def _sort_key(self, version: SymbolVersion) -> tuple[str, tuple[int | str, ...], str]:
+    @staticmethod
+    def _sort_key(version: SymbolVersion) -> tuple[str, tuple[int | str, ...], str]:
         parts: list[int | str] = []
         for part in version.version.split("."):
             parts.append(int(part) if part.isdigit() else part)

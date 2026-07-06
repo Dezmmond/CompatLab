@@ -1,7 +1,9 @@
-from compatlab.src.elfscan.models import SymbolVersion
-from compatlab.src.problem.models import Problem
-from compatlab.src.profile.models import TargetProfile
-from compatlab.src.report.models import ArtifactReport
+from compatlab.models import (
+    SymbolVersion,
+    TargetProfile,
+    ArtifactReport,
+    Problem,
+)
 
 
 BUILD_PATH_PREFIXES = ("/home", "/tmp", "/build", "/workspace", "/var/tmp")
@@ -10,7 +12,8 @@ BUILD_PATH_PREFIXES = ("/home", "/tmp", "/build", "/workspace", "/var/tmp")
 class VersionComparator:
     """Compares ABI version strings such as GLIBC_2.38 or 3.4.29."""
 
-    def parse_tuple(self, value: str) -> tuple[int, ...]:
+    @staticmethod
+    def parse_tuple(value: str) -> tuple[int, ...]:
         version = value.rsplit("_", maxsplit=1)[-1]
         return tuple(int(part) for part in version.split("."))
 
@@ -48,9 +51,9 @@ class ArchitectureNormalizer:
 
 
 class ProblemFactory:
+    @staticmethod
     def create(
-        self,
-        report: ArtifactReport,
+            report: ArtifactReport,
         *,
         problem_id: str,
         severity: str,
@@ -308,7 +311,8 @@ class CompatibilityComparator:
                 )
         return problems
 
-    def _is_build_path(self, path: str) -> bool:
+    @staticmethod
+    def _is_build_path(path: str) -> bool:
         return any(
             path == prefix or path.startswith(f"{prefix}/") for prefix in BUILD_PATH_PREFIXES
         )

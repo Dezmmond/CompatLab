@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
@@ -7,11 +5,15 @@ from typing import Iterable, Sequence
 
 from pydantic import BaseModel
 
-from compatlab.src.bundle.models import DependencyEdge, DependencyGraph
-from compatlab.src.diagnostics import DiagnosticIssue, DiagnosticSummary
-from compatlab.src.elfscan.models import SymbolVersion
-from compatlab.src.problem.models import Problem
-from compatlab.src.report.models import ArtifactReport
+from compatlab.models import (
+    ArtifactReport,
+    DependencyEdge,
+    DependencyGraph,
+    DiagnosticSummary,
+    DiagnosticIssue,
+    Problem,
+    SymbolVersion,
+)
 
 
 class HtmlReportContext(BaseModel):

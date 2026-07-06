@@ -3,7 +3,7 @@ from typing import Protocol
 from rich.console import Console
 from rich.table import Table
 
-from compatlab.src.report.models import ArtifactReport
+from compatlab.models import ArtifactReport
 
 
 class ProfileRow(Protocol):

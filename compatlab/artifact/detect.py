@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from compatlab.src.report.models import ArtifactInfo
+from compatlab.models import ArtifactInfo
 
 
 def detect_artifact(path: Path) -> ArtifactInfo:

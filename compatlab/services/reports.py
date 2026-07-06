@@ -1,17 +1,17 @@
 from pathlib import Path
 
-import typer
 from rich.console import Console
 
-from compatlab.src.bundle.models import DependencyGraph, DependencyResolutionKind
-from compatlab.src.diagnostics import diagnostics_from_report_parts, summarize_diagnostics
-from compatlab.src.problem.models import Problem
-from compatlab.src.report.html import HtmlReportContext, write_html_report
-from compatlab.src.report.json import write_json_report
+from compatlab.diagnostics import diagnostics_from_report_parts, summarize_diagnostics
+from compatlab.models import DependencyGraph, DependencyResolutionKind, Problem
+from compatlab.report.html import HtmlReportContext, write_html_report
+from compatlab.report.json import write_json_report
+from compatlab.services.exceptions import CommandExit
 
 
 class DiagnosticsAugmenter:
-    def add_diagnostics(self, report):
+    @staticmethod
+    def add_diagnostics(report):
         diagnostics = diagnostics_from_report_parts(
             problems=report.problems,
             warnings=report.warnings,
@@ -44,13 +44,13 @@ class ReportWriter:
                 write_html_report(report, html_output, context=html_context)
         except OSError as exc:
             self.console.print(f"[red]Could not write report: {exc}[/red]")
-            raise typer.Exit(2) from exc
+            raise CommandExit(2) from exc
 
 
 class HtmlContextFactory:
+    @staticmethod
     def scan(
-        self,
-        *,
+            *,
         bundle_root: Path | None,
         recursive: bool,
     ) -> HtmlReportContext:
@@ -61,9 +61,9 @@ class HtmlContextFactory:
             recursive=recursive,
         )
 
+    @staticmethod
     def compare(
-        self,
-        *,
+            *,
         target: str | None,
         target_file: Path | None,
         bundle_root: Path | None,
@@ -82,7 +82,8 @@ class HtmlContextFactory:
 
 
 class DependencyProblemFactory:
-    def from_graph(self, graph: DependencyGraph) -> list[Problem]:
+    @staticmethod
+    def from_graph(graph: DependencyGraph) -> list[Problem]:
         problems: list[Problem] = []
         for edge in graph.unresolved_dependencies:
             severity = "HIGH"

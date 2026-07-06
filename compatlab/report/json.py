@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from compatlab.src.report.models import ArtifactReport
+from compatlab.models import ArtifactReport
 
 
 def write_json_report(report: ArtifactReport, path: Path) -> None:

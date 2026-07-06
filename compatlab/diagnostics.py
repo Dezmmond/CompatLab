@@ -1,52 +1,16 @@
 from enum import Enum
 from typing import Sequence
 
-from pydantic import BaseModel, Field
-
-from compatlab.src.bundle.models import (
+from compatlab.models import (
     DependencyEdge,
     DependencyGraph,
+    DiagnosticSeverity,
+    DiagnosticCategory,
+    DiagnosticIssue,
+    DiagnosticSummary,
     DependencyResolutionKind,
+    Problem,
 )
-from compatlab.src.problem.models import Problem
-
-
-class DiagnosticSeverity(str, Enum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-
-
-class DiagnosticCategory(str, Enum):
-    ARTIFACT = "artifact"
-    TARGET = "target"
-    BUNDLE = "bundle"
-    SYMBOLS = "symbols"
-    LOADER = "loader"
-    RPATH = "rpath"
-    LIMITS = "limits"
-
-
-class DiagnosticIssue(BaseModel):
-    code: str
-    severity: DiagnosticSeverity
-    category: DiagnosticCategory
-    title: str
-    message: str
-    affected_path: str | None = None
-    dependency_name: str | None = None
-    dependency_chain: list[str] = Field(default_factory=list)
-    required: str | None = None
-    provided: str | None = None
-    hint: str | None = None
-
-
-class DiagnosticSummary(BaseModel):
-    status: str = "passed"
-    errors: int = 0
-    warnings: int = 0
-    infos: int = 0
-    issue_codes: dict[str, int] = Field(default_factory=dict)
 
 
 class FailOn(str, Enum):

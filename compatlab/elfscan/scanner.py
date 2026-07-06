@@ -1,21 +1,23 @@
 from pathlib import Path
 
-from compatlab.src.artifact.detect import detect_artifact
-from compatlab.src.elfscan.command import CommandResult, run_readelf
-from compatlab.src.elfscan.models import ElfInfo
-from compatlab.src.elfscan.parsers import (
+from compatlab.artifact.detect import detect_artifact
+from compatlab.elfscan.command import CommandResult, run_readelf
+from compatlab.elfscan.parsers import (
     parse_dynamic_section,
     parse_elf_header,
     parse_program_headers,
     parse_version_info,
 )
-from compatlab.src.problem.models import Problem
-from compatlab.src.report.models import ArtifactReport
+from compatlab.models import ElfInfo, Problem, ArtifactReport
 
 
 class ScanWarningFactory:
+    @staticmethod
     def warning(
-        self, path: Path, title: str, details: str, evidence: dict[str, str] | None = None
+            path: Path,
+            title: str,
+            details: str,
+            evidence: dict[str, str] | None = None
     ) -> Problem:
         return Problem(
             id="scan.warning",
@@ -26,7 +28,11 @@ class ScanWarningFactory:
             evidence=evidence or {},
         )
 
-    def command_warning(self, path: Path, result: CommandResult) -> Problem:
+    def command_warning(
+            self,
+            path: Path,
+            result: CommandResult
+    ) -> Problem:
         command = " ".join(result.args)
         stderr = result.stderr.strip()
         details = f"{command} exited with code {result.returncode}"
