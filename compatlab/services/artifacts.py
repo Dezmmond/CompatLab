@@ -6,7 +6,7 @@ import compatlab.bundle.resolver as bundle_resolver
 import compatlab.elfscan.scanner as elf_scanner
 import compatlab.profile.catalog as profile_catalog
 import compatlab.rpm.scanner as rpm_scanner
-import compatlab.wheel.scanner as wheel_scanner
+import compatlab.wheels.scanner as wheel_scanner
 
 from compatlab.artifact.detect import ArtifactKind, detect_artifact_kind
 from compatlab.bundle.resolver import (
@@ -278,7 +278,9 @@ class ArtifactCommandService:
                     }
                 )
             )
-        return report.model_copy(update={"target": profile, "entries": entries})
+        return report.model_copy(
+            update={"target": profile, "entries": entries, "native_entries": entries}
+        )
 
     @staticmethod
     def _exit_for_diagnostics(report, fail_on: FailOn) -> None:

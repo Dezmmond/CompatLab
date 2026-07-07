@@ -244,6 +244,7 @@ class ArtifactReport(BaseModel):
     elf: ElfInfo | None = None
     package: PackageMetadata | None = None
     entries: list[PackageEntry] = Field(default_factory=list)
+    native_entries: list[PackageEntry] = Field(default_factory=list)
     target: TargetProfile | None = None
     summary: DiagnosticSummary = Field(default_factory=DiagnosticSummary)
     diagnostics: list[DiagnosticIssue] = Field(default_factory=list)

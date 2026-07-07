@@ -42,6 +42,7 @@ class DiagnosticsAugmenter:
             update={
                 "diagnostics": diagnostics,
                 "entries": entries,
+                "native_entries": entries,
                 "summary": summarize_diagnostics(diagnostics),
             }
         )

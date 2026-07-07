@@ -12,7 +12,7 @@ from compatlab.models import (
     DiagnosticSeverity,
     Problem,
     PackageEntry,
-    PackageMetadata
+    PackageMetadata,
 )
 
 DEFAULT_MAX_WHEEL_FILES = 1000
@@ -34,7 +34,7 @@ def scan_wheel(
 ) -> ArtifactReport:
     artifact = detect_artifact(path).model_copy(update={"kind": "wheel"})
     diagnostics: list[DiagnosticIssue] = []
-    package = PackageMetadata()
+    package = PackageMetadata(type="wheel")
     native_entries: list[PackageEntry] = []
 
     if artifact.size_bytes is not None and artifact.size_bytes > max_wheel_size_bytes:
@@ -117,6 +117,7 @@ def scan_wheel(
     return ArtifactReport(
         artifact=artifact,
         package=package,
+        entries=native_entries,
         native_entries=native_entries,
         diagnostics=diagnostics,
     )
@@ -154,7 +155,7 @@ def _read_package_metadata(
         )
 
     dist_info_dir = dist_info_dirs[0] if dist_info_dirs else None
-    package = PackageMetadata(dist_info_dir=dist_info_dir)
+    package = PackageMetadata(type="wheel", dist_info_dir=dist_info_dir)
     if dist_info_dir is None:
         return package, diagnostics
 
