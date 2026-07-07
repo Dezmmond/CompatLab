@@ -11,3 +11,5 @@ __pycache__/
 /htmlcov/
 /.codex/
 /.agents/
+/dist-bin/
+/dist-bin/*

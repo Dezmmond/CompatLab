@@ -1,0 +1,49 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV UV_LINK_MODE=copy
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    python3.11 \
+    python3.11-dev \
+    python3.11-venv \
+    build-essential \
+    patchelf \
+    ccache \
+    binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+WORKDIR /src
+
+COPY . /src
+
+RUN uv sync --all-extras --dev
+
+RUN uv run pytest
+RUN uv run ruff check .
+RUN uv run ruff format --check .
+
+RUN mkdir -p build && \
+    printf '%s\n' \
+    'from compatlab.cli import app' \
+    '' \
+    'app()' \
+    > build/compatlab_entry.py
+
+RUN uv add --dev nuitka ordered-set zstandard
+
+RUN uv run python -m nuitka \
+    --onefile \
+    --standalone \
+    --follow-imports \
+    --include-package=compatlab \
+    --include-package-data=compatlab \
+    --output-dir=/out \
+    --output-filename=compatlab \
+    build/compatlab_entry.py
