@@ -38,8 +38,6 @@ from compatlab.models import (
     SymbolVersionFacts,
     SystemFacts,
     TargetProfile,
-    WheelNativeEntry,
-    WheelPackageMetadata,
 )
 
 __all__ = [
@@ -66,8 +64,6 @@ __all__ = [
     "SymbolVersionFacts",
     "SystemFacts",
     "TargetProfile",
-    "WheelNativeEntry",
-    "WheelPackageMetadata",
     "artifact",
     "bundle",
     "compare",

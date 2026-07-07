@@ -11,8 +11,8 @@ from compatlab.models import (
     DiagnosticIssue,
     DiagnosticSeverity,
     Problem,
-    WheelNativeEntry,
-    WheelPackageMetadata,
+    PackageEntry,
+    PackageMetadata
 )
 
 DEFAULT_MAX_WHEEL_FILES = 1000
@@ -34,8 +34,8 @@ def scan_wheel(
 ) -> ArtifactReport:
     artifact = detect_artifact(path).model_copy(update={"kind": "wheel"})
     diagnostics: list[DiagnosticIssue] = []
-    package = WheelPackageMetadata()
-    native_entries: list[WheelNativeEntry] = []
+    package = PackageMetadata()
+    native_entries: list[PackageEntry] = []
 
     if artifact.size_bytes is not None and artifact.size_bytes > max_wheel_size_bytes:
         diagnostics.append(
@@ -125,7 +125,7 @@ def scan_wheel(
 def _read_package_metadata(
     wheel: zipfile.ZipFile,
     infos: list[zipfile.ZipInfo],
-) -> tuple[WheelPackageMetadata, list[DiagnosticIssue]]:
+) -> tuple[PackageMetadata, list[DiagnosticIssue]]:
     diagnostics: list[DiagnosticIssue] = []
     dist_info_dirs = sorted(
         {
@@ -154,7 +154,7 @@ def _read_package_metadata(
         )
 
     dist_info_dir = dist_info_dirs[0] if dist_info_dirs else None
-    package = WheelPackageMetadata(dist_info_dir=dist_info_dir)
+    package = PackageMetadata(dist_info_dir=dist_info_dir)
     if dist_info_dir is None:
         return package, diagnostics
 
@@ -230,8 +230,8 @@ def _native_infos(wheel: zipfile.ZipFile, infos: list[zipfile.ZipInfo]) -> list[
 def _scan_native_entries(
     wheel: zipfile.ZipFile,
     infos: list[zipfile.ZipInfo],
-) -> list[WheelNativeEntry]:
-    entries: list[WheelNativeEntry] = []
+) -> list[PackageEntry]:
+    entries: list[PackageEntry] = []
     with tempfile.TemporaryDirectory(prefix="compatlab-wheel-") as tmp:
         tmp_path = Path(tmp)
         for index, info in enumerate(infos):
@@ -250,7 +250,7 @@ def _scan_native_entries(
                     )
                 )
             entries.append(
-                WheelNativeEntry(
+                PackageEntry(
                     path=info.filename,
                     size=info.file_size,
                     elf=report.elf,
@@ -267,8 +267,8 @@ def _scan_native_entries(
 
 
 def _package_consistency_diagnostics(
-    package: WheelPackageMetadata,
-    native_entries: list[WheelNativeEntry],
+    package: PackageMetadata,
+    native_entries: list[PackageEntry],
 ) -> list[DiagnosticIssue]:
     if package.root_is_purelib is not True or not native_entries:
         return []
