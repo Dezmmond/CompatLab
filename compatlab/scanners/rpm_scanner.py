@@ -1,13 +1,13 @@
-from dataclasses import dataclass
 import gzip
-from pathlib import Path, PurePosixPath
 import stat
 import struct
 import tempfile
 import zlib
 
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
 from compatlab.artifact.detect import detect_artifact
-from compatlab.scanners.elf_scanner import scan_path as scan_elf_path
 from compatlab.models import (
     ArtifactReport,
     DiagnosticCategory,
@@ -17,6 +17,8 @@ from compatlab.models import (
     PackageMetadata,
     Problem,
 )
+from compatlab.scanners.elf_scanner import scan_path as scan_elf_path
+
 
 RPM_MAGIC = b"\xed\xab\xee\xdb"
 HEADER_MAGIC = b"\x8e\xad\xe8\x01"

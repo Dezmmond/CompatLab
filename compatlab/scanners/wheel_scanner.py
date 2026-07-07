@@ -1,10 +1,10 @@
-from email.parser import Parser
-from pathlib import Path, PurePosixPath
 import tempfile
 import zipfile
 
+from email.parser import Parser
+from pathlib import Path, PurePosixPath
+
 from compatlab.artifact.detect import detect_artifact
-from compatlab.scanners.elf_scanner import scan_path as scan_elf_path
 from compatlab.models import (
     ArtifactReport,
     DiagnosticCategory,
@@ -14,6 +14,8 @@ from compatlab.models import (
     PackageEntry,
     PackageMetadata,
 )
+from compatlab.scanners.elf_scanner import scan_path as scan_elf_path
+
 
 DEFAULT_MAX_WHEEL_FILES = 1000
 DEFAULT_MAX_WHEEL_SIZE_BYTES = 200 * 1024 * 1024

@@ -1,3 +1,4 @@
+from compatlab.models import ElfInfo, SymbolVersion
 from .command import (
     CommandResult,
     run_command,
@@ -18,8 +19,6 @@ from .scanner import (
     ScanWarningFactory,
     scan_path
 )
-
-from compatlab.models import ElfInfo, SymbolVersion
 
 
 __all__ = [

@@ -1,7 +1,6 @@
 from collections import deque
 from pathlib import Path
 
-from compatlab.scanners.elf_scanner import scan_path
 from compatlab.models import (
     DependencyEdge,
     DependencyGraph,
@@ -12,6 +11,7 @@ from compatlab.models import (
     TargetProfile,
     ArtifactReport,
 )
+from compatlab.scanners.elf_scanner import scan_path
 
 DEFAULT_MAX_DEPTH = 10
 DEFAULT_MAX_FILES = 500

@@ -7,10 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from compatlab.compare.engine import normalize_architecture, parse_version_tuple
-from compatlab.scanners.elf_scanner import CommandResult, run_command, run_readelf
-from compatlab.scanners.elf_scanner import parse_version_info
-from compatlab.models import FactWarning, SymbolVersionFacts, SystemFacts
+from compatlab.compare.engine import (
+    normalize_architecture,
+    parse_version_tuple,
+)
+from compatlab.models import (
+    FactWarning,
+    SymbolVersionFacts,
+    SystemFacts,
+)
 from compatlab.profile.rootfs import (
     detect_dynamic_linkers_in_tar,
     extract_member_to_directory,
@@ -23,6 +28,12 @@ from compatlab.profile.runtimes import (
     detect_package_manager_from_rootfs,
     get_runtime_preset,
     packages_for_manager,
+)
+from compatlab.scanners.elf_scanner import (
+    CommandResult,
+    run_command,
+    run_readelf,
+    parse_version_info,
 )
 
 

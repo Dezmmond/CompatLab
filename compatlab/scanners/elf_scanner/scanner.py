@@ -1,14 +1,21 @@
 from pathlib import Path
 
 from compatlab.artifact.detect import detect_artifact
-from compatlab.scanners.elf_scanner import CommandResult, run_readelf
+from compatlab.models import (
+    ElfInfo,
+    Problem,
+    ArtifactReport,
+)
+from compatlab.scanners.elf_scanner import (
+    CommandResult,
+    run_readelf,
+)
 from compatlab.scanners.elf_scanner import (
     parse_dynamic_section,
     parse_elf_header,
     parse_program_headers,
     parse_version_info,
 )
-from compatlab.models import ElfInfo, Problem, ArtifactReport
 
 
 class ScanWarningFactory:

@@ -3,8 +3,8 @@ from pathlib import Path
 from rich.console import Console
 
 import compatlab.bundle.resolver as bundle_resolver
-import compatlab.scanners.elf_scanner.scanner as elf_scanner
 import compatlab.profile.catalog as profile_catalog
+import compatlab.scanners.elf_scanner.scanner as elf_scanner
 import compatlab.scanners.rpm_scanner as rpm_scanner
 import compatlab.scanners.wheel_scanner as wheel_scanner
 

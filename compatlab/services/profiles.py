@@ -1,19 +1,20 @@
 import json
-from pathlib import Path
-
 import yaml
+
+from pathlib import Path
 from rich.console import Console
 
 import compatlab.profile.catalog as profile_catalog
 import compatlab.profile.docker as docker_profiles
 import compatlab.profile.local as local_profiles
+
 from compatlab.models import SystemFacts, TargetProfile
-from compatlab.profile.docker import DockerError
 from compatlab.profile.builder import generate_target_profile_from_facts
 from compatlab.profile.catalog import (
     ProfileLoadError,
     ProfileNotFoundError,
 )
+from compatlab.profile.docker import DockerError
 from compatlab.profile.runtimes import (
     RuntimePreset,
     RuntimePresetError,
