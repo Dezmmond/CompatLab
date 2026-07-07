@@ -1,7 +1,7 @@
 from enum import Enum
+from pydantic import BaseModel, Field
 from typing import Literal
 
-from pydantic import BaseModel, Field
 
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 
@@ -204,19 +204,31 @@ class ArtifactInfo(BaseModel):
     sha256: str | None = None
 
 
-class WheelPackageMetadata(BaseModel):
-    type: Literal["wheel"] = "wheel"
+class PackageMetadata(BaseModel):
+    type: str
     name: str | None = None
+    epoch: int | None = None
     version: str | None = None
-    build: str | None = None
-    generator: str | None = None
+    release: str | None = None
+    architecture: str | None = None
+    summary: str | None = None
+    license: str | None = None
+    vendor: str | None = None
+    group: str | None = None
+    build_time: int | None = None
+    source_rpm: str | None = None
+    payload_file_count: int | None = None
+    native_entry_count: int | None = None
     root_is_purelib: bool | None = None
     tags: list[str] = Field(default_factory=list)
+    generator: str | None = None
+    build: str | None = None
     dist_info_dir: str | None = None
 
 
-class WheelNativeEntry(BaseModel):
+class PackageEntry(BaseModel):
     path: str
+    kind: str = "elf"
     size: int | None = None
     elf: ElfInfo | None = None
     diagnostics: list[DiagnosticIssue] = Field(default_factory=list)
@@ -230,8 +242,9 @@ class ArtifactReport(BaseModel):
     tool: str = "compatlab"
     artifact: ArtifactInfo
     elf: ElfInfo | None = None
-    package: WheelPackageMetadata | None = None
-    native_entries: list[WheelNativeEntry] = Field(default_factory=list)
+    package: PackageMetadata | None = None
+    entries: list[PackageEntry] = Field(default_factory=list)
+    native_entries: list[PackageEntry] = Field(default_factory=list)
     target: TargetProfile | None = None
     summary: DiagnosticSummary = Field(default_factory=DiagnosticSummary)
     diagnostics: list[DiagnosticIssue] = Field(default_factory=list)

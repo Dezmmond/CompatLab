@@ -20,8 +20,8 @@ class DiagnosticsAugmenter:
                 graph=report.dependency_graph,
             ),
         ]
-        native_entries = []
-        for entry in report.native_entries:
+        entries = []
+        for entry in report.entries:
             entry_diagnostics = [
                 *entry.diagnostics,
                 *diagnostics_from_report_parts(
@@ -29,7 +29,7 @@ class DiagnosticsAugmenter:
                     warnings=entry.warnings,
                 ),
             ]
-            native_entries.append(
+            entries.append(
                 entry.model_copy(
                     update={
                         "diagnostics": entry_diagnostics,
@@ -41,7 +41,8 @@ class DiagnosticsAugmenter:
         return report.model_copy(
             update={
                 "diagnostics": diagnostics,
-                "native_entries": native_entries,
+                "entries": entries,
+                "native_entries": entries,
                 "summary": summarize_diagnostics(diagnostics),
             }
         )

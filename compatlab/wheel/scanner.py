@@ -10,19 +10,14 @@ from compatlab.models import (
     DiagnosticCategory,
     DiagnosticIssue,
     DiagnosticSeverity,
-    Problem,
     PackageEntry,
     PackageMetadata,
+    Problem,
 )
 
 DEFAULT_MAX_WHEEL_FILES = 1000
 DEFAULT_MAX_WHEEL_SIZE_BYTES = 200 * 1024 * 1024
 DEFAULT_MAX_WHEEL_EXTRACTED_SIZE_BYTES = 500 * 1024 * 1024
-
-
-def is_safe_archive_path(name: str) -> bool:
-    path = PurePosixPath(name)
-    return bool(name) and not path.is_absolute() and ".." not in path.parts and "" not in path.parts
 
 
 def scan_wheel(
@@ -35,8 +30,6 @@ def scan_wheel(
     artifact = detect_artifact(path).model_copy(update={"kind": "wheel"})
     diagnostics: list[DiagnosticIssue] = []
     package = PackageMetadata(type="wheel")
-    native_entries: list[PackageEntry] = []
-
     if artifact.size_bytes is not None and artifact.size_bytes > max_wheel_size_bytes:
         diagnostics.append(
             _issue(
@@ -60,7 +53,6 @@ def scan_wheel(
                         f"Wheel contains {len(infos)} files, limit is {max_files}.",
                     )
                 )
-
             unsafe = [info.filename for info in infos if not is_safe_archive_path(info.filename)]
             diagnostics.extend(
                 _issue(
@@ -74,8 +66,7 @@ def scan_wheel(
             )
             if unsafe:
                 return ArtifactReport(artifact=artifact, package=package, diagnostics=diagnostics)
-
-            package, metadata_diagnostics = _read_package_metadata(wheel, infos)
+            package, metadata_diagnostics = _read_metadata(wheel, infos)
             diagnostics.extend(metadata_diagnostics)
             native_infos = _native_infos(wheel, infos)
             extracted_size = sum(info.file_size for info in native_infos)
@@ -92,10 +83,22 @@ def scan_wheel(
                     )
                 )
                 return ArtifactReport(artifact=artifact, package=package, diagnostics=diagnostics)
-
-            native_entries = _scan_native_entries(wheel, native_infos)
-            diagnostics.extend(_package_consistency_diagnostics(package, native_entries))
-            if not native_entries:
+            entries = _scan_native_entries(wheel, native_infos)
+            package = package.model_copy(
+                update={"payload_file_count": len(infos), "native_entry_count": len(entries)}
+            )
+            if package.root_is_purelib is True and entries:
+                diagnostics.extend(
+                    _issue(
+                        "CL_WHEEL_PURELIB_WITH_NATIVE_CODE",
+                        DiagnosticSeverity.WARNING,
+                        "Purelib wheel contains native code",
+                        "Wheel declares Root-Is-Purelib=true but contains native ELF entries.",
+                        affected_path=entry.path,
+                    )
+                    for entry in entries
+                )
+            if not entries:
                 diagnostics.append(
                     _issue(
                         "CL_WHEEL_NO_NATIVE_EXTENSIONS",
@@ -113,17 +116,18 @@ def scan_wheel(
                 "The wheel file could not be opened as a zip archive.",
             )
         )
-
+        entries = []
     return ArtifactReport(
-        artifact=artifact,
-        package=package,
-        entries=native_entries,
-        native_entries=native_entries,
-        diagnostics=diagnostics,
+        artifact=artifact, package=package, entries=entries, diagnostics=diagnostics
     )
 
 
-def _read_package_metadata(
+def is_safe_archive_path(name: str) -> bool:
+    path = PurePosixPath(name)
+    return bool(name) and not path.is_absolute() and ".." not in path.parts and "" not in path.parts
+
+
+def _read_metadata(
     wheel: zipfile.ZipFile,
     infos: list[zipfile.ZipInfo],
 ) -> tuple[PackageMetadata, list[DiagnosticIssue]]:
@@ -135,7 +139,9 @@ def _read_package_metadata(
             if PurePosixPath(info.filename).parent.name.endswith(".dist-info")
         }
     )
-    if not dist_info_dirs:
+    dist_info_dir = dist_info_dirs[0] if dist_info_dirs else None
+    package = PackageMetadata(type="wheel", dist_info_dir=dist_info_dir)
+    if dist_info_dir is None:
         diagnostics.append(
             _issue(
                 "CL_WHEEL_NO_DIST_INFO",
@@ -144,36 +150,19 @@ def _read_package_metadata(
                 "No .dist-info directory was found in the wheel.",
             )
         )
-    elif len(dist_info_dirs) > 1:
-        diagnostics.append(
-            _issue(
-                "CL_WHEEL_MULTIPLE_DIST_INFO",
-                DiagnosticSeverity.WARNING,
-                "Wheel has multiple dist-info directories",
-                "Multiple .dist-info directories were found in the wheel.",
-            )
-        )
-
-    dist_info_dir = dist_info_dirs[0] if dist_info_dirs else None
-    package = PackageMetadata(type="wheel", dist_info_dir=dist_info_dir)
-    if dist_info_dir is None:
         return package, diagnostics
 
+    names = {info.filename for info in infos}
     wheel_metadata_path = f"{dist_info_dir}/WHEEL"
     metadata_path = f"{dist_info_dir}/METADATA"
-    record_path = f"{dist_info_dir}/RECORD"
-    names = {info.filename for info in infos}
-
     if wheel_metadata_path in names:
         message = Parser().parsestr(_read_text(wheel, wheel_metadata_path))
-        root_is_purelib = _parse_bool(message.get("Root-Is-Purelib"))
-        tags = message.get_all("Tag", [])
         package = package.model_copy(
             update={
-                "root_is_purelib": root_is_purelib,
+                "root_is_purelib": _parse_bool(message.get("Root-Is-Purelib")),
                 "generator": message.get("Generator"),
                 "build": message.get("Build"),
-                "tags": tags,
+                "tags": message.get_all("Tag", []),
             }
         )
     else:
@@ -185,7 +174,6 @@ def _read_package_metadata(
                 f"{wheel_metadata_path} was not found.",
             )
         )
-
     if metadata_path in names:
         message = Parser().parsestr(_read_text(wheel, metadata_path))
         package = package.model_copy(
@@ -200,16 +188,6 @@ def _read_package_metadata(
                 f"{metadata_path} was not found.",
             )
         )
-
-    if record_path not in names:
-        diagnostics.append(
-            _issue(
-                "CL_WHEEL_RECORD_MISSING",
-                DiagnosticSeverity.WARNING,
-                "Wheel RECORD file is missing",
-                f"{record_path} was not found.",
-            )
-        )
     return package, diagnostics
 
 
@@ -218,8 +196,7 @@ def _native_infos(wheel: zipfile.ZipFile, infos: list[zipfile.ZipInfo]) -> list[
     for info in infos:
         if info.is_dir():
             continue
-        name = info.filename
-        if name.endswith(".so") or ".so." in name:
+        if info.filename.endswith(".so") or ".so." in info.filename:
             native.append(info)
             continue
         with wheel.open(info) as handle:
@@ -229,8 +206,7 @@ def _native_infos(wheel: zipfile.ZipFile, infos: list[zipfile.ZipInfo]) -> list[
 
 
 def _scan_native_entries(
-    wheel: zipfile.ZipFile,
-    infos: list[zipfile.ZipInfo],
+    wheel: zipfile.ZipFile, infos: list[zipfile.ZipInfo]
 ) -> list[PackageEntry]:
     entries: list[PackageEntry] = []
     with tempfile.TemporaryDirectory(prefix="compatlab-wheel-") as tmp:
@@ -267,24 +243,6 @@ def _scan_native_entries(
     return entries
 
 
-def _package_consistency_diagnostics(
-    package: PackageMetadata,
-    native_entries: list[PackageEntry],
-) -> list[DiagnosticIssue]:
-    if package.root_is_purelib is not True or not native_entries:
-        return []
-    return [
-        _issue(
-            "CL_WHEEL_PURELIB_WITH_NATIVE_CODE",
-            DiagnosticSeverity.WARNING,
-            "Purelib wheel contains native code",
-            "Wheel declares Root-Is-Purelib=true but contains native ELF entries.",
-            affected_path=entry.path,
-        )
-        for entry in native_entries
-    ]
-
-
 def _read_text(wheel: zipfile.ZipFile, name: str) -> str:
     return wheel.read(name).decode("utf-8", errors="replace")
 
@@ -292,16 +250,15 @@ def _read_text(wheel: zipfile.ZipFile, name: str) -> str:
 def _parse_bool(value: str | None) -> bool | None:
     if value is None:
         return None
-    normalized = value.strip().lower()
-    if normalized == "true":
+    if value.strip().lower() == "true":
         return True
-    if normalized == "false":
+    if value.strip().lower() == "false":
         return False
     return None
 
 
-def _retarget_problem(problem: Problem, wheel_path: str) -> Problem:
-    return problem.model_copy(update={"artifact_path": wheel_path})
+def _retarget_problem(problem: Problem, path: str) -> Problem:
+    return problem.model_copy(update={"artifact_path": path})
 
 
 def _issue(

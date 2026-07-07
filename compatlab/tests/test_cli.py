@@ -24,6 +24,8 @@ from compatlab.bundle import BundleResolutionResult
 from compatlab.cli import app
 from compatlab.profile.docker import DockerError
 from compatlab.profile.catalog import load_profile_file
+from compatlab.tests.rpm_fixtures import write_test_rpm
+from compatlab.tests.wheel_fixtures import write_test_wheel
 
 
 @dataclass(frozen=True)
@@ -162,43 +164,55 @@ def test_scan_command_writes_json_report(tmp_path: Path) -> None:
     assert raw["diagnostics"][0]["code"] == "CL_ELF_SCAN_FAILED"
 
 
-def test_scan_command_supports_pure_python_wheel_json(tmp_path: Path) -> None:
-    artifact = tmp_path / "demo-1.0.0-py3-none-any.whl"
-    output = tmp_path / "report.json"
-    _write_wheel(artifact)
-
-    result = runner.invoke(app, ["scan", str(artifact), "--json", str(output)])
-
-    assert result.exit_code == 0
-    assert "Wheel package" in result.output
-    raw = json.loads(output.read_text(encoding="utf-8"))
-    assert raw["artifact"]["kind"] == "wheel"
-    assert raw["package"]["name"] == "demo"
-    assert raw["native_entries"] == []
-    assert raw["summary"]["issue_codes"]["CL_WHEEL_NO_NATIVE_EXTENSIONS"] == 1
-
-
-def test_scan_command_supports_native_wheel_html(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
-    output = tmp_path / "report.html"
-    _write_wheel(artifact, native=True, purelib=False)
+def test_scan_command_supports_rpm_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    artifact = tmp_path / "demo-1.0.0-1.x86_64.rpm"
+    report = tmp_path / "report.json"
+    write_test_rpm(artifact, files={"usr/bin/demo": b"\x7fELFfake"})
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.rpm.scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
         ),
     )
 
-    result = runner.invoke(app, ["scan", str(artifact), "--html", str(output)])
+    result = runner.invoke(app, ["scan", str(artifact), "--json", str(report)])
 
     assert result.exit_code == 0
-    html = output.read_text(encoding="utf-8")
-    assert "Wheel Metadata" in html
-    assert "Native Entries" in html
-    assert "demo/_native.cpython-311-x86_64-linux-gnu.so" in html
+    assert "RPM package" in result.output
+    raw = json.loads(report.read_text(encoding="utf-8"))
+    assert raw["artifact"]["kind"] == "rpm"
+    assert raw["package"]["name"] == "demo"
+    assert raw["package"]["payload_file_count"] == 1
+    assert raw["entries"][0]["path"] == "/usr/bin/demo"
+
+
+def test_scan_command_supports_rpm_html_no_native(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-1.0.0-1.x86_64.rpm"
+    report = tmp_path / "report.html"
+    write_test_rpm(artifact, files={"usr/share/doc/readme": b"hello"})
+
+    result = runner.invoke(app, ["scan", str(artifact), "--html", str(report)])
+
+    assert result.exit_code == 0
+    html = report.read_text(encoding="utf-8")
+    assert "RPM Metadata" in html
+    assert "Package Native Entries" in html
+    assert "CL_RPM_NO_ELF_ENTRIES" in html
+
+
+def test_scan_command_supports_wheel_json(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-1.0.0-py3-none-any.whl"
+    report = tmp_path / "report.json"
+    write_test_wheel(artifact)
+
+    result = runner.invoke(app, ["scan", str(artifact), "--json", str(report)])
+
+    assert result.exit_code == 0
+    raw = json.loads(report.read_text(encoding="utf-8"))
+    assert raw["artifact"]["kind"] == "wheel"
+    assert raw["package"]["name"] == "demo"
+    assert raw["summary"]["issue_codes"]["CL_WHEEL_NO_NATIVE_EXTENSIONS"] == 1
 
 
 def test_scan_command_writes_html_report(tmp_path: Path) -> None:
@@ -361,6 +375,76 @@ def test_compare_command_accepts_external_target_file(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert "Local Test" in result.output
     assert "scan.failed" in result.output
+
+
+def test_compare_command_supports_rpm_target_file_json_html(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-1.x86_64.rpm"
+    profile = tmp_path / "local.yaml"
+    json_output = tmp_path / "report.json"
+    html_output = tmp_path / "report.html"
+    _write_profile(profile)
+    write_test_rpm(artifact, files={"usr/bin/demo": b"\x7fELFfake"})
+    monkeypatch.setattr(
+        "compatlab.rpm.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "never",
+            "--json",
+            str(json_output),
+            "--html",
+            str(html_output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    raw = json.loads(json_output.read_text(encoding="utf-8"))
+    assert raw["summary"]["status"] == "failed"
+    assert raw["entries"][0]["diagnostics"][0]["code"] == "CL_LIB_MISSING"
+    assert "CL_LIB_MISSING" in html_output.read_text(encoding="utf-8")
+
+
+def test_compare_command_supports_rpm_builtin_target_fail_on_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-1.x86_64.rpm"
+    write_test_rpm(artifact, files={"usr/bin/demo": b"\x7fELFfake"})
+    monkeypatch.setattr(
+        "compatlab.rpm.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                runpath=["/tmp/build/lib"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target", "ubuntu-2204", "--fail-on", "warning"],
+    )
+
+    assert result.exit_code == 1
+    assert "CL_RPATH_ABSOLUTE" in result.output
 
 
 def test_compare_command_supports_native_wheel_target_file(

@@ -1,6 +1,6 @@
 [project]
 name = "compatlab"
-version = "1.1.0"
+version = "1.2.0"
 description = "Preflight compatibility checker for Linux binary artifacts"
 readme = "README.md"
 requires-python = ">=3.12"

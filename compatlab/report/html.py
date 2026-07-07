@@ -41,8 +41,8 @@ def render_html_report(report: ArtifactReport, *, context: HtmlReportContext) ->
             _render_header(report, context, generated_at),
             _render_summary(report.summary),
             _render_diagnostics(report.diagnostics),
-            _render_wheel_metadata(report),
-            _render_native_entries(report),
+            _render_package_metadata(report),
+            _render_package_entries(report),
             _render_dependency_graph(report.dependency_graph),
             _render_legacy_issues(report.problems, report.warnings),
             _render_technical_details(report),
@@ -163,29 +163,36 @@ def _render_diagnostics(diagnostics: Sequence[DiagnosticIssue]) -> str:
     )
 
 
-def _render_wheel_metadata(report: ArtifactReport) -> str:
+def _render_package_metadata(report: ArtifactReport) -> str:
     package = report.package
     if package is None:
         return ""
     rows = [
-        ("Wheel path", report.artifact.path),
-        ("Package name", package.name),
+        ("Package type", package.type),
+        ("Name", package.name),
+        ("Epoch", package.epoch),
         ("Version", package.version),
-        ("Tags", ", ".join(package.tags)),
-        ("Root-Is-Purelib", package.root_is_purelib),
-        ("Generator", package.generator),
-        ("Build", package.build),
-        ("dist-info directory", package.dist_info_dir),
+        ("Release", package.release),
+        ("Architecture", package.architecture),
+        ("Summary", package.summary),
+        ("License", package.license),
+        ("Vendor", package.vendor),
+        ("Group", package.group),
+        ("Build time", package.build_time),
+        ("Source RPM", package.source_rpm),
+        ("Payload files", package.payload_file_count),
+        ("Native ELF entries", package.native_entry_count),
     ]
-    return _section("Wheel Metadata", _definition_list(rows))
+    return _section(f"{package.type.upper()} Metadata", _definition_list(rows))
 
 
-def _render_native_entries(report: ArtifactReport) -> str:
+def _render_package_entries(report: ArtifactReport) -> str:
     if report.package is None:
         return ""
     rows = [
         (
             entry.path,
+            entry.kind,
             entry.size,
             _entry_status(entry),
             entry.summary.errors,
@@ -194,13 +201,14 @@ def _render_native_entries(report: ArtifactReport) -> str:
             entry.elf.machine if entry.elf is not None else None,
             ", ".join(issue.code for issue in entry.diagnostics),
         )
-        for entry in report.native_entries
+        for entry in report.entries
     ]
     return _section(
-        "Native Entries",
+        "Package Native Entries",
         _table(
             [
                 "Path",
+                "Kind",
                 "Size",
                 "Status",
                 "Errors",

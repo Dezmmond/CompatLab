@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
-
 from rich.console import Console
 
 import compatlab.bundle.resolver as bundle_resolver
 import compatlab.elfscan.scanner as elf_scanner
 import compatlab.profile.catalog as profile_catalog
+import compatlab.rpm.scanner as rpm_scanner
 import compatlab.wheels.scanner as wheel_scanner
+
 from compatlab.artifact.detect import ArtifactKind, detect_artifact_kind
 from compatlab.bundle.resolver import (
     BundleResolutionError,
@@ -75,41 +76,32 @@ class ArtifactCommandService:
         self.dependency_problems = dependency_problems or DependencyProblemFactory()
 
     def scan(self, options: ScanCommandOptions) -> None:
-        if detect_artifact_kind(options.path) == ArtifactKind.WHEEL:
+        kind = detect_artifact_kind(options.path)
+        if kind == ArtifactKind.WHEEL:
             report = wheel_scanner.scan_wheel(options.path)
-            report = self.diagnostics.add_diagnostics(report)
-            self.writer.write(
-                report,
-                json_output=options.json_output,
-                html_output=options.html_output,
-                html_context=self.html_contexts.scan(
-                    bundle_root=options.bundle_root,
-                    recursive=options.recursive,
-                ),
-            )
-            render_report(report, self.console)
-            self._exit_for_diagnostics(report, options.fail_on)
-            return
-
-        report = elf_scanner.scan_path(options.path)
-        if options.bundle_root is not None:
-            try:
-                resolution = bundle_resolver.resolve_bundle_dependencies(
-                    options.path,
-                    options.bundle_root,
-                    recursive=options.recursive,
-                    max_depth=options.max_depth,
-                    max_files=options.max_files,
+        elif kind == ArtifactKind.RPM:
+            report = rpm_scanner.scan_rpm(options.path)
+        else:
+            report = elf_scanner.scan_path(options.path)
+            if options.bundle_root is not None:
+                try:
+                    resolution = bundle_resolver.resolve_bundle_dependencies(
+                        options.path,
+                        options.bundle_root,
+                        recursive=options.recursive,
+                        max_depth=options.max_depth,
+                        max_files=options.max_files,
+                    )
+                except BundleResolutionError as exc:
+                    self.console.print(f"[red]{exc}[/red]")
+                    raise CommandExit(2) from exc
+                report = report.model_copy(
+                    update={
+                        "dependency_graph": resolution.graph,
+                        "warnings": [*report.warnings, *resolution.warnings],
+                    }
                 )
-            except BundleResolutionError as exc:
-                self.console.print(f"[red]{exc}[/red]")
-                raise CommandExit(2) from exc
-            report = report.model_copy(
-                update={
-                    "dependency_graph": resolution.graph,
-                    "warnings": [*report.warnings, *resolution.warnings],
-                }
-            )
+
         report = self.diagnostics.add_diagnostics(report)
         self.writer.write(
             report,
@@ -125,33 +117,28 @@ class ArtifactCommandService:
 
     def compare(self, options: CompareCommandOptions) -> None:
         profile = self._load_profile(options)
-        if detect_artifact_kind(options.path) == ArtifactKind.WHEEL:
-            report = self._compare_wheel(options, profile)
-            report = self.diagnostics.add_diagnostics(report)
-            self.writer.write(
-                report,
-                json_output=options.json_output,
-                html_output=options.html_output,
-                html_context=self.html_contexts.compare(
-                    target=options.target,
-                    target_file=options.target_file,
-                    bundle_root=options.bundle_root,
-                    recursive=options.recursive,
-                ),
+        kind = detect_artifact_kind(options.path)
+
+        if kind == ArtifactKind.WHEEL:
+            report = self._compare_package(
+                wheel_scanner.scan_wheel(options.path),
+                profile,
             )
-            render_report(report, self.console)
-            self._exit_for_diagnostics(report, options.fail_on)
-            return
-
-        scan_report = elf_scanner.scan_path(options.path)
-        if self._scan_failed(scan_report):
-            self._handle_scan_failure(scan_report, profile, options)
-            return
-
-        if options.bundle_root is not None:
-            report = self._compare_bundle(scan_report, profile, options)
+        elif kind == ArtifactKind.RPM:
+            report = self._compare_package(
+                rpm_scanner.scan_rpm(options.path),
+                profile,
+            )
         else:
-            report = comparator(scan_report, profile)
+            scan_report = elf_scanner.scan_path(options.path)
+            if self._scan_failed(scan_report):
+                self._handle_scan_failure(scan_report, profile, options)
+                return
+
+            if options.bundle_root is not None:
+                report = self._compare_bundle(scan_report, profile, options)
+            else:
+                report = comparator(scan_report, profile)
 
         report = self.diagnostics.add_diagnostics(report)
         self.writer.write(
@@ -256,10 +243,15 @@ class ArtifactCommandService:
             }
         )
 
-    def _compare_wheel(self, options: CompareCommandOptions, profile):
-        report = wheel_scanner.scan_wheel(options.path)
-        native_entries = []
-        for entry in report.native_entries:
+    @staticmethod
+    def _compare_package(report, profile):
+        provided_by_package = {
+            Path(entry.path).name
+            for entry in report.entries
+            if entry.path.endswith(".so") or ".so." in entry.path
+        }
+        entries = []
+        for entry in report.entries:
             entry_report = report.model_copy(
                 update={
                     "artifact": report.artifact.model_copy(
@@ -267,14 +259,18 @@ class ArtifactCommandService:
                     ),
                     "elf": entry.elf,
                     "package": None,
-                    "native_entries": [],
+                    "entries": [],
                     "problems": entry.problems,
                     "warnings": entry.warnings,
                     "diagnostics": [],
                 }
             )
-            compared = comparator(entry_report, profile)
-            native_entries.append(
+            compared = comparator(
+                entry_report,
+                profile,
+                assumed_provided_libraries=provided_by_package,
+            )
+            entries.append(
                 entry.model_copy(
                     update={
                         "problems": compared.problems,
@@ -282,7 +278,9 @@ class ArtifactCommandService:
                     }
                 )
             )
-        return report.model_copy(update={"target": profile, "native_entries": native_entries})
+        return report.model_copy(
+            update={"target": profile, "entries": entries, "native_entries": entries}
+        )
 
     @staticmethod
     def _exit_for_diagnostics(report, fail_on: FailOn) -> None:
