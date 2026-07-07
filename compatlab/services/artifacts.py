@@ -6,6 +6,8 @@ from rich.console import Console
 import compatlab.bundle.resolver as bundle_resolver
 import compatlab.elfscan.scanner as elf_scanner
 import compatlab.profile.catalog as profile_catalog
+import compatlab.wheels.scanner as wheel_scanner
+from compatlab.artifact.detect import ArtifactKind, detect_artifact_kind
 from compatlab.bundle.resolver import (
     BundleResolutionError,
 )
@@ -73,6 +75,22 @@ class ArtifactCommandService:
         self.dependency_problems = dependency_problems or DependencyProblemFactory()
 
     def scan(self, options: ScanCommandOptions) -> None:
+        if detect_artifact_kind(options.path) == ArtifactKind.WHEEL:
+            report = wheel_scanner.scan_wheel(options.path)
+            report = self.diagnostics.add_diagnostics(report)
+            self.writer.write(
+                report,
+                json_output=options.json_output,
+                html_output=options.html_output,
+                html_context=self.html_contexts.scan(
+                    bundle_root=options.bundle_root,
+                    recursive=options.recursive,
+                ),
+            )
+            render_report(report, self.console)
+            self._exit_for_diagnostics(report, options.fail_on)
+            return
+
         report = elf_scanner.scan_path(options.path)
         if options.bundle_root is not None:
             try:
@@ -107,6 +125,24 @@ class ArtifactCommandService:
 
     def compare(self, options: CompareCommandOptions) -> None:
         profile = self._load_profile(options)
+        if detect_artifact_kind(options.path) == ArtifactKind.WHEEL:
+            report = self._compare_wheel(options, profile)
+            report = self.diagnostics.add_diagnostics(report)
+            self.writer.write(
+                report,
+                json_output=options.json_output,
+                html_output=options.html_output,
+                html_context=self.html_contexts.compare(
+                    target=options.target,
+                    target_file=options.target_file,
+                    bundle_root=options.bundle_root,
+                    recursive=options.recursive,
+                ),
+            )
+            render_report(report, self.console)
+            self._exit_for_diagnostics(report, options.fail_on)
+            return
+
         scan_report = elf_scanner.scan_path(options.path)
         if self._scan_failed(scan_report):
             self._handle_scan_failure(scan_report, profile, options)
@@ -144,7 +180,6 @@ class ArtifactCommandService:
         except (ProfileNotFoundError, ProfileLoadError) as exc:
             self.console.print(f"[red]{exc}[/red]")
             raise CommandExit(2) from exc
-
 
     @staticmethod
     def _scan_failed(report) -> bool:
@@ -220,6 +255,34 @@ class ArtifactCommandService:
                 "warnings": warnings,
             }
         )
+
+    def _compare_wheel(self, options: CompareCommandOptions, profile):
+        report = wheel_scanner.scan_wheel(options.path)
+        native_entries = []
+        for entry in report.native_entries:
+            entry_report = report.model_copy(
+                update={
+                    "artifact": report.artifact.model_copy(
+                        update={"path": entry.path, "kind": "ELF", "size_bytes": entry.size}
+                    ),
+                    "elf": entry.elf,
+                    "package": None,
+                    "native_entries": [],
+                    "problems": entry.problems,
+                    "warnings": entry.warnings,
+                    "diagnostics": [],
+                }
+            )
+            compared = comparator(entry_report, profile)
+            native_entries.append(
+                entry.model_copy(
+                    update={
+                        "problems": compared.problems,
+                        "warnings": compared.warnings,
+                    }
+                )
+            )
+        return report.model_copy(update={"target": profile, "native_entries": native_entries})
 
     @staticmethod
     def _exit_for_diagnostics(report, fail_on: FailOn) -> None:

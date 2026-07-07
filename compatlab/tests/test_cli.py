@@ -1,5 +1,6 @@
 import json
 import shutil
+import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
@@ -70,6 +71,31 @@ def _write_profile(path: Path) -> None:
     path.write_text(PROFILE_YAML, encoding="utf-8")
 
 
+def _write_wheel(path: Path, *, native: bool = False, purelib: bool = True) -> None:
+    with zipfile.ZipFile(path, "w") as wheel:
+        tag = "cp311-cp311-linux_x86_64" if native else "py3-none-any"
+        wheel.writestr(
+            "demo-1.0.0.dist-info/WHEEL",
+            "\n".join(
+                [
+                    "Wheel-Version: 1.0",
+                    "Generator: compatlab-test",
+                    f"Root-Is-Purelib: {str(purelib).lower()}",
+                    f"Tag: {tag}",
+                    "",
+                ]
+            ),
+        )
+        wheel.writestr(
+            "demo-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n",
+        )
+        wheel.writestr("demo-1.0.0.dist-info/RECORD", "")
+        wheel.writestr("demo/__init__.py", b"")
+        if native:
+            wheel.writestr("demo/_native.cpython-311-x86_64-linux-gnu.so", b"\x7fELFfake")
+
+
 def _system_facts() -> SystemFacts:
     return SystemFacts(
         os_release=OsReleaseFacts(id="ubuntu", version_id="24.04", pretty_name="Ubuntu 24.04 LTS"),
@@ -134,6 +160,45 @@ def test_scan_command_writes_json_report(tmp_path: Path) -> None:
     raw = json.loads(report.read_text(encoding="utf-8"))
     assert raw["summary"]["status"] == "warning"
     assert raw["diagnostics"][0]["code"] == "CL_ELF_SCAN_FAILED"
+
+
+def test_scan_command_supports_pure_python_wheel_json(tmp_path: Path) -> None:
+    artifact = tmp_path / "demo-1.0.0-py3-none-any.whl"
+    output = tmp_path / "report.json"
+    _write_wheel(artifact)
+
+    result = runner.invoke(app, ["scan", str(artifact), "--json", str(output)])
+
+    assert result.exit_code == 0
+    assert "Wheel package" in result.output
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["artifact"]["kind"] == "wheel"
+    assert raw["package"]["name"] == "demo"
+    assert raw["native_entries"] == []
+    assert raw["summary"]["issue_codes"]["CL_WHEEL_NO_NATIVE_EXTENSIONS"] == 1
+
+
+def test_scan_command_supports_native_wheel_html(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    output = tmp_path / "report.html"
+    _write_wheel(artifact, native=True, purelib=False)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
+        ),
+    )
+
+    result = runner.invoke(app, ["scan", str(artifact), "--html", str(output)])
+
+    assert result.exit_code == 0
+    html = output.read_text(encoding="utf-8")
+    assert "Wheel Metadata" in html
+    assert "Native Entries" in html
+    assert "demo/_native.cpython-311-x86_64-linux-gnu.so" in html
 
 
 def test_scan_command_writes_html_report(tmp_path: Path) -> None:
@@ -296,6 +361,99 @@ def test_compare_command_accepts_external_target_file(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert "Local Test" in result.output
     assert "scan.failed" in result.output
+
+
+def test_compare_command_supports_native_wheel_target_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.json"
+    _write_wheel(artifact, native=True, purelib=False)
+    _write_profile(profile)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "never",
+            "--json",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Native compatibility" in result.output
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["summary"]["status"] == "failed"
+    assert raw["native_entries"][0]["diagnostics"][0]["code"] == "CL_LIB_MISSING"
+
+
+def test_compare_command_supports_native_wheel_builtin_target_fail_on_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    _write_wheel(artifact, native=True, purelib=True)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target", "ubuntu-2204", "--fail-on", "warning"],
+    )
+
+    assert result.exit_code == 1
+    assert "CL_WHEEL_PURELIB_WITH_NATIVE_CODE" in result.output
+
+
+def test_compare_command_writes_wheel_html_before_nonzero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.html"
+    _write_wheel(artifact, native=True, purelib=False)
+    _write_profile(profile)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target-file", str(profile), "--html", str(output)],
+    )
+
+    assert result.exit_code == 1
+    assert output.exists()
+    assert "CL_LIB_MISSING" in output.read_text(encoding="utf-8")
 
 
 def test_compare_command_rejects_missing_external_target_file(tmp_path: Path) -> None:
@@ -596,10 +754,7 @@ def test_profiles_detect_writes_raw_facts_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "system-facts.json"
-    monkeypatch.setattr(
-        "compatlab.profile.local.detect_current_system",
-        _system_facts
-    )
+    monkeypatch.setattr("compatlab.profile.local.detect_current_system", _system_facts)
 
     result = runner.invoke(app, ["profiles", "detect", "--json", str(output)])
 
@@ -622,10 +777,7 @@ def test_profiles_detect_from_image_writes_raw_facts_json(
         assert kwargs["pull"] is True
         return _docker_facts()
 
-    monkeypatch.setattr(
-        "compatlab.profile.docker.detect_docker_image_system",
-        fake_detect
-    )
+    monkeypatch.setattr("compatlab.profile.docker.detect_docker_image_system", fake_detect)
 
     result = runner.invoke(
         app,
@@ -658,10 +810,7 @@ def test_profiles_detect_from_image_with_runtime_preset_writes_runtime_facts(
         assert kwargs["runtime_preset"] == "cpp-runtime"
         return _docker_runtime_facts()
 
-    monkeypatch.setattr(
-        "compatlab.profile.docker.detect_docker_image_system",
-        fake_detect
-    )
+    monkeypatch.setattr("compatlab.profile.docker.detect_docker_image_system", fake_detect)
 
     result = runner.invoke(
         app,
@@ -695,10 +844,7 @@ def test_profiles_generate_writes_loadable_yaml(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "local.yaml"
-    monkeypatch.setattr(
-        "compatlab.profile.local.detect_current_system",
-        _system_facts
-    )
+    monkeypatch.setattr("compatlab.profile.local.detect_current_system", _system_facts)
 
     result = runner.invoke(
         app,
@@ -726,10 +872,7 @@ def test_profiles_generate_from_image_writes_loadable_yaml(
         assert kwargs["pull"] is True
         return _docker_facts()
 
-    monkeypatch.setattr(
-        "compatlab.profile.docker.detect_docker_image_system",
-        fake_detect
-    )
+    monkeypatch.setattr("compatlab.profile.docker.detect_docker_image_system", fake_detect)
 
     result = runner.invoke(
         app,
@@ -768,10 +911,7 @@ def test_profiles_generate_from_image_with_runtime_preset_writes_runtime_metadat
         assert kwargs["runtime_preset"] == "cpp-runtime"
         return _docker_runtime_facts()
 
-    monkeypatch.setattr(
-        "compatlab.profile.docker.detect_docker_image_system",
-        fake_detect
-    )
+    monkeypatch.setattr("compatlab.profile.docker.detect_docker_image_system", fake_detect)
 
     result = runner.invoke(
         app,
@@ -841,10 +981,7 @@ def test_profiles_generate_from_image_reports_docker_error(
     def fake_detect(image: str, **kwargs: object) -> SystemFacts:
         raise DockerError("Docker is not available.")
 
-    monkeypatch.setattr(
-        "compatlab.profile.docker.detect_docker_image_system",
-        fake_detect
-    )
+    monkeypatch.setattr("compatlab.profile.docker.detect_docker_image_system", fake_detect)
 
     result = runner.invoke(
         app,

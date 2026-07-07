@@ -13,6 +13,15 @@ class ProfileRow(Protocol):
 
 
 def render_report(report: ArtifactReport, console: Console) -> None:
+    if report.package is not None:
+        _render_wheel(report, console)
+        if report.target is not None:
+            console.print(f"[bold]Target:[/bold] {report.target.name} ({report.target.id})")
+        if report.diagnostics:
+            _render_diagnostics(report, console)
+        _render_summary(report, console)
+        return
+
     console.print(f"[bold]Artifact:[/bold] {report.artifact.path}")
     console.print(f"[bold]Kind:[/bold] {report.artifact.kind}")
     if report.artifact.size_bytes is not None:
@@ -82,6 +91,33 @@ def _render_elf(report: ArtifactReport, console: Console) -> None:
             console.print(f"  [bold]{namespace}:[/bold]")
             for version in versions:
                 console.print(f"    - {version}")
+
+
+def _render_wheel(report: ArtifactReport, console: Console) -> None:
+    package = report.package
+    if package is None:
+        return
+    console.print("[bold]Wheel package[/bold]")
+    console.print(f"  [bold]Path:[/bold] {report.artifact.path}")
+    if package.name is not None:
+        console.print(f"  [bold]Name:[/bold] {package.name}")
+    if package.version is not None:
+        console.print(f"  [bold]Version:[/bold] {package.version}")
+    if package.tags:
+        console.print(f"  [bold]Tags:[/bold] {', '.join(package.tags)}")
+    if package.root_is_purelib is not None:
+        console.print(f"  [bold]Root-Is-Purelib:[/bold] {_yes_no(package.root_is_purelib)}")
+    console.print(f"  [bold]Native entries:[/bold] {len(report.native_entries)}")
+    if report.native_entries:
+        table = Table(title="Native compatibility")
+        table.add_column("Status", no_wrap=True)
+        table.add_column("Path")
+        table.add_column("Diagnostics")
+        for entry in report.native_entries:
+            status = "FAIL" if entry.summary.errors else "WARN" if entry.summary.warnings else "OK"
+            diagnostics = ", ".join(issue.code for issue in entry.diagnostics)
+            table.add_row(status, entry.path, diagnostics)
+        console.print(table)
 
 
 def _render_dependency_graph(report: ArtifactReport, console: Console) -> None:

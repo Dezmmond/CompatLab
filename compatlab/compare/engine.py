@@ -53,7 +53,7 @@ class ArchitectureNormalizer:
 class ProblemFactory:
     @staticmethod
     def create(
-            report: ArtifactReport,
+        report: ArtifactReport,
         *,
         problem_id: str,
         severity: str,

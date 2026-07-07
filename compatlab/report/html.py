@@ -41,6 +41,8 @@ def render_html_report(report: ArtifactReport, *, context: HtmlReportContext) ->
             _render_header(report, context, generated_at),
             _render_summary(report.summary),
             _render_diagnostics(report.diagnostics),
+            _render_wheel_metadata(report),
+            _render_native_entries(report),
             _render_dependency_graph(report.dependency_graph),
             _render_legacy_issues(report.problems, report.warnings),
             _render_technical_details(report),
@@ -157,6 +159,58 @@ def _render_diagnostics(diagnostics: Sequence[DiagnosticIssue]) -> str:
             ],
             rows,
             empty="No diagnostics.",
+        ),
+    )
+
+
+def _render_wheel_metadata(report: ArtifactReport) -> str:
+    package = report.package
+    if package is None:
+        return ""
+    rows = [
+        ("Wheel path", report.artifact.path),
+        ("Package name", package.name),
+        ("Version", package.version),
+        ("Tags", ", ".join(package.tags)),
+        ("Root-Is-Purelib", package.root_is_purelib),
+        ("Generator", package.generator),
+        ("Build", package.build),
+        ("dist-info directory", package.dist_info_dir),
+    ]
+    return _section("Wheel Metadata", _definition_list(rows))
+
+
+def _render_native_entries(report: ArtifactReport) -> str:
+    if report.package is None:
+        return ""
+    rows = [
+        (
+            entry.path,
+            entry.size,
+            _entry_status(entry),
+            entry.summary.errors,
+            entry.summary.warnings,
+            entry.summary.infos,
+            entry.elf.machine if entry.elf is not None else None,
+            ", ".join(issue.code for issue in entry.diagnostics),
+        )
+        for entry in report.native_entries
+    ]
+    return _section(
+        "Native Entries",
+        _table(
+            [
+                "Path",
+                "Size",
+                "Status",
+                "Errors",
+                "Warnings",
+                "Info",
+                "Machine",
+                "Diagnostic Codes",
+            ],
+            rows,
+            empty="No native ELF entries.",
         ),
     )
 
@@ -352,6 +406,14 @@ def _symbol_versions(versions: Sequence[SymbolVersion]) -> str:
     return "; ".join(
         f"{namespace}: {', '.join(values)}" for namespace, values in sorted(grouped.items())
     )
+
+
+def _entry_status(entry) -> str:
+    if entry.summary.errors:
+        return "failed"
+    if entry.summary.warnings:
+        return "warning"
+    return "passed"
 
 
 _CSS = """

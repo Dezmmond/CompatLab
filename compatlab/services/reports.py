@@ -12,14 +12,36 @@ from compatlab.services.exceptions import CommandExit
 class DiagnosticsAugmenter:
     @staticmethod
     def add_diagnostics(report):
-        diagnostics = diagnostics_from_report_parts(
-            problems=report.problems,
-            warnings=report.warnings,
-            graph=report.dependency_graph,
-        )
+        diagnostics = [
+            *report.diagnostics,
+            *diagnostics_from_report_parts(
+                problems=report.problems,
+                warnings=report.warnings,
+                graph=report.dependency_graph,
+            ),
+        ]
+        native_entries = []
+        for entry in report.native_entries:
+            entry_diagnostics = [
+                *entry.diagnostics,
+                *diagnostics_from_report_parts(
+                    problems=entry.problems,
+                    warnings=entry.warnings,
+                ),
+            ]
+            native_entries.append(
+                entry.model_copy(
+                    update={
+                        "diagnostics": entry_diagnostics,
+                        "summary": summarize_diagnostics(entry_diagnostics),
+                    }
+                )
+            )
+            diagnostics.extend(entry_diagnostics)
         return report.model_copy(
             update={
                 "diagnostics": diagnostics,
+                "native_entries": native_entries,
                 "summary": summarize_diagnostics(diagnostics),
             }
         )
@@ -50,7 +72,7 @@ class ReportWriter:
 class HtmlContextFactory:
     @staticmethod
     def scan(
-            *,
+        *,
         bundle_root: Path | None,
         recursive: bool,
     ) -> HtmlReportContext:
@@ -63,7 +85,7 @@ class HtmlContextFactory:
 
     @staticmethod
     def compare(
-            *,
+        *,
         target: str | None,
         target_file: Path | None,
         bundle_root: Path | None,
