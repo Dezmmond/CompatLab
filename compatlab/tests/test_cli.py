@@ -1,5 +1,6 @@
 import json
 import shutil
+import zipfile
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
@@ -70,6 +71,31 @@ provided_libraries:
 
 def _write_profile(path: Path) -> None:
     path.write_text(PROFILE_YAML, encoding="utf-8")
+
+
+def _write_wheel(path: Path, *, native: bool = False, purelib: bool = True) -> None:
+    with zipfile.ZipFile(path, "w") as wheel:
+        tag = "cp311-cp311-linux_x86_64" if native else "py3-none-any"
+        wheel.writestr(
+            "demo-1.0.0.dist-info/WHEEL",
+            "\n".join(
+                [
+                    "Wheel-Version: 1.0",
+                    "Generator: compatlab-test",
+                    f"Root-Is-Purelib: {str(purelib).lower()}",
+                    f"Tag: {tag}",
+                    "",
+                ]
+            ),
+        )
+        wheel.writestr(
+            "demo-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n",
+        )
+        wheel.writestr("demo-1.0.0.dist-info/RECORD", "")
+        wheel.writestr("demo/__init__.py", b"")
+        if native:
+            wheel.writestr("demo/_native.cpython-311-x86_64-linux-gnu.so", b"\x7fELFfake")
 
 
 def _system_facts() -> SystemFacts:
@@ -419,6 +445,99 @@ def test_compare_command_supports_rpm_builtin_target_fail_on_warning(
 
     assert result.exit_code == 1
     assert "CL_RPATH_ABSOLUTE" in result.output
+
+
+def test_compare_command_supports_native_wheel_target_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.json"
+    _write_wheel(artifact, native=True, purelib=False)
+    _write_profile(profile)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "compare",
+            str(artifact),
+            "--target-file",
+            str(profile),
+            "--fail-on",
+            "never",
+            "--json",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Native compatibility" in result.output
+    raw = json.loads(output.read_text(encoding="utf-8"))
+    assert raw["summary"]["status"] == "failed"
+    assert raw["native_entries"][0]["diagnostics"][0]["code"] == "CL_LIB_MISSING"
+
+
+def test_compare_command_supports_native_wheel_builtin_target_fail_on_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    _write_wheel(artifact, native=True, purelib=True)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target", "ubuntu-2204", "--fail-on", "warning"],
+    )
+
+    assert result.exit_code == 1
+    assert "CL_WHEEL_PURELIB_WITH_NATIVE_CODE" in result.output
+
+
+def test_compare_command_writes_wheel_html_before_nonzero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
+    profile = tmp_path / "local.yaml"
+    output = tmp_path / "report.html"
+    _write_wheel(artifact, native=True, purelib=False)
+    _write_profile(profile)
+    monkeypatch.setattr(
+        "compatlab.wheels.scanner.scan_elf_path",
+        lambda path: ArtifactReport(
+            artifact=ArtifactInfo(path=str(path), kind="ELF"),
+            elf=ElfInfo(
+                elf_class="ELF64",
+                machine="Advanced Micro Devices X86-64",
+                needed=["libmissing.so.1"],
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        ["compare", str(artifact), "--target-file", str(profile), "--html", str(output)],
+    )
+
+    assert result.exit_code == 1
+    assert output.exists()
+    assert "CL_LIB_MISSING" in output.read_text(encoding="utf-8")
 
 
 def test_compare_command_rejects_missing_external_target_file(tmp_path: Path) -> None:

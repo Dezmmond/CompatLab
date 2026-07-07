@@ -16,9 +16,12 @@ profile generation from the current system or Docker image rootfs exports.
 
 ```bash
 compatlab scan ./app
+compatlab scan ./dist/demo-1.0.0-py3-none-any.whl
+compatlab scan ./dist/demo-1.0.0-cp311-cp311-linux_x86_64.whl
 compatlab scan ./dist/example-1.0.0-1.x86_64.rpm
 compatlab scan ./dist/my-app --bundle-root ./dist --recursive
 compatlab compare ./app --target ubuntu-1804
+compatlab compare ./dist/demo-1.0.0-cp311-cp311-linux_x86_64.whl --target ubuntu-2204
 compatlab compare ./dist/example-1.0.0-1.x86_64.rpm --target ubuntu-2204
 compatlab compare ./app --target-file ./local.yaml
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive
@@ -37,8 +40,10 @@ JSON report output is wired for scan and compare:
 
 ```bash
 compatlab scan ./app --json report.json
+compatlab scan ./dist/demo-1.0.0-cp311-cp311-linux_x86_64.whl --json report.json
 compatlab scan ./dist/example-1.0.0-1.x86_64.rpm --json report.json
 compatlab compare ./app --target ubuntu-1804 --json report.json
+compatlab compare ./dist/demo-1.0.0-cp311-cp311-linux_x86_64.whl --target ubuntu-2204 --json report.json
 compatlab compare ./dist/example-1.0.0-1.x86_64.rpm --target-file ./profiles/prod.yaml --json report.json --html report.html
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --json report.json
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --fail-on never --json report.json
@@ -72,6 +77,33 @@ uv run compatlab compare ./dist/my-app \
 The HTML report includes the diagnostic summary, normalized diagnostic issues,
 bundle dependency resolution details, legacy compatibility problems and
 warnings, and compact ELF/target metadata.
+
+## Python Wheel Scanning
+
+CompatLab accepts Python wheel (`.whl`) files in the existing `scan` and
+`compare` commands. Wheel scanning is static: CompatLab opens the zip archive,
+reads `WHEEL`, `METADATA`, and `RECORD` metadata, discovers native ELF entries
+such as `.so`, `.so.*`, `*.cpython-...so`, and `*.abi3.so`, and scans only those
+native files with the existing ELF pipeline. Wheel code is not imported or
+executed.
+
+```bash
+uv run compatlab scan ./dist/demo-1.0.0-py3-none-any.whl
+uv run compatlab scan ./dist/demo-1.0.0-cp311-cp311-linux_x86_64.whl \
+  --json wheel-report.json \
+  --html wheel-report.html
+
+uv run compatlab compare ./dist/demo-1.0.0-cp311-cp311-linux_x86_64.whl \
+  --target ubuntu-2204 \
+  --fail-on warning \
+  --json wheel-compat.json \
+  --html wheel-compat.html
+```
+
+Pure Python wheels report `CL_WHEEL_NO_NATIVE_EXTENSIONS` as an informational
+diagnostic. Native wheels aggregate compatibility diagnostics from every native
+entry, so existing codes such as `CL_SYMBOL_GLIBCXX_TOO_NEW`, `CL_LIB_MISSING`,
+and `CL_RPATH_ABSOLUTE` continue to drive JSON summaries and `--fail-on`.
 
 ## RPM Package Scanning
 
@@ -245,7 +277,7 @@ The first MVP is intentionally narrow:
 ## Not In Scope Yet
 
 CompatLab does not add arbitrary package installation, Dockerfile generation,
-Docker image mutation/commit, web UI, database, daemon, DEB analysis,
+Docker image mutation/commit, web UI, database, daemon, wheel/RPM/DEB analysis,
 SBOM/security scanning, automatic patching, or a Go implementation. Those are
 explicitly outside the current implementation pass.
 
