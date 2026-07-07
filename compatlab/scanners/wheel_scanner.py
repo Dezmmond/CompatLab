@@ -4,7 +4,7 @@ import tempfile
 import zipfile
 
 from compatlab.artifact.detect import detect_artifact
-from compatlab.elfscan.scanner import scan_path as scan_elf_path
+from compatlab.scanners.elf_scanner import scan_path as scan_elf_path
 from compatlab.models import (
     ArtifactReport,
     DiagnosticCategory,

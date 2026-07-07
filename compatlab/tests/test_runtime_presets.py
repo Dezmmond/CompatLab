@@ -3,8 +3,8 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-from compatlab.models import OsReleaseFacts
 
+from compatlab.models import OsReleaseFacts
 from compatlab.profile.runtimes import (
     RuntimePresetError,
     build_install_script,

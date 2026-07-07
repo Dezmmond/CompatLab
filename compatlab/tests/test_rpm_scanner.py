@@ -2,7 +2,7 @@ from pathlib import Path
 
 from compatlab.artifact.detect import ArtifactKind, detect_artifact_kind
 from compatlab.models import ArtifactInfo, ArtifactReport, ElfInfo, Problem
-from compatlab.rpm.scanner import scan_rpm
+from compatlab.scanners.rpm_scanner import scan_rpm
 from compatlab.tests.rpm_fixtures import write_test_rpm
 
 
@@ -49,7 +49,7 @@ def test_scan_rpm_scans_native_elf_entries(tmp_path: Path, monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        "compatlab.rpm.scanner.scan_elf_path",
+        "compatlab.scanners.rpm_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
@@ -117,7 +117,7 @@ def test_scan_rpm_reports_entry_scan_failure(tmp_path: Path, monkeypatch) -> Non
     rpm = tmp_path / "demo-1.0.0-1.x86_64.rpm"
     write_test_rpm(rpm, files={"usr/bin/demo": b"\x7fELFfake"})
     monkeypatch.setattr(
-        "compatlab.rpm.scanner.scan_elf_path",
+        "compatlab.scanners.rpm_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(),

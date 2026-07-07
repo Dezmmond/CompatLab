@@ -1,19 +1,15 @@
 """CompatLab ArtifactDoctor package."""
 
-__version__ = "1.2.0"
-
 from compatlab import (
     artifact,
     bundle,
     compare,
     diagnostics,
-    elfscan,
     problem,
     profile,
     report,
-    rpm,
+    scanners,
     services,
-    wheel,
 )
 from compatlab.models import (
     ArtifactInfo,
@@ -39,6 +35,9 @@ from compatlab.models import (
     SystemFacts,
     TargetProfile,
 )
+
+
+__version__ = "1.2.0"
 
 __all__ = [
     "__version__",
@@ -68,11 +67,9 @@ __all__ = [
     "bundle",
     "compare",
     "diagnostics",
-    "elfscan",
     "problem",
     "profile",
     "report",
-    "rpm",
+    "scanners",
     "services",
-    "wheel",
 ]

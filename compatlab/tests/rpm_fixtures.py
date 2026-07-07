@@ -1,7 +1,8 @@
-from pathlib import Path
 import gzip
 import stat
 import struct
+
+from pathlib import Path
 
 
 RPM_TYPE_INT32 = 4

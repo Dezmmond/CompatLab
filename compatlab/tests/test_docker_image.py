@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from compatlab.elfscan.command import CommandResult
 from compatlab.profile.docker import DockerImageMetadata
 from compatlab.profile.docker import (
     detect_docker_image_system,
     system_facts_from_rootfs_tar,
 )
+from compatlab.scanners.elf_scanner import CommandResult
 
 
 def _write_rootfs_tar(path: Path, *, binaries: list[str] | None = None) -> None:

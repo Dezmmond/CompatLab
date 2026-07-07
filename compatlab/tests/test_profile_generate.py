@@ -6,7 +6,6 @@ from compatlab.models import (
     SystemFacts,
     SymbolVersionFacts,
 )
-
 from compatlab.profile.builder import generate_target_profile_from_facts
 
 

@@ -1,3 +1,10 @@
+from compatlab.compare import (
+    compare_report,
+    is_version_newer,
+    max_required_version,
+    normalize_architecture,
+    parse_version_tuple,
+)
 from compatlab.models import (
     ArtifactInfo,
     ArtifactReport,
@@ -7,14 +14,6 @@ from compatlab.models import (
     ProvidedLibrary,
     SymbolVersion,
     TargetProfile,
-)
-
-from compatlab.compare import (
-    compare_report,
-    is_version_newer,
-    max_required_version,
-    normalize_architecture,
-    parse_version_tuple,
 )
 
 

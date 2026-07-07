@@ -1,5 +1,5 @@
-from pathlib import Path
 import zipfile
+from pathlib import Path
 
 
 def write_test_wheel(path: Path, *, native: bool = False, purelib: bool = True) -> None:

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from compatlab.bundle import resolve_bundle_dependencies
 from compatlab.models import (
     ArtifactInfo,
     ArtifactReport,
@@ -10,8 +11,6 @@ from compatlab.models import (
     SymbolVersion,
     TargetProfile,
 )
-
-from compatlab.bundle import resolve_bundle_dependencies
 
 
 def _report(path: Path, elf: ElfInfo) -> ArtifactReport:

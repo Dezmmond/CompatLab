@@ -7,6 +7,9 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
+
+from compatlab.bundle import BundleResolutionResult
+from compatlab.cli import app
 from compatlab.models import (
     ArtifactInfo,
     ArtifactReport,
@@ -19,11 +22,8 @@ from compatlab.models import (
     SystemFacts,
     SymbolVersionFacts,
 )
-
-from compatlab.bundle import BundleResolutionResult
-from compatlab.cli import app
-from compatlab.profile.docker import DockerError
 from compatlab.profile.catalog import load_profile_file
+from compatlab.profile.docker import DockerError
 from compatlab.tests.rpm_fixtures import write_test_rpm
 from compatlab.tests.wheel_fixtures import write_test_wheel
 
@@ -169,7 +169,7 @@ def test_scan_command_supports_rpm_json(tmp_path: Path, monkeypatch: pytest.Monk
     report = tmp_path / "report.json"
     write_test_rpm(artifact, files={"usr/bin/demo": b"\x7fELFfake"})
     monkeypatch.setattr(
-        "compatlab.rpm.scanner.scan_elf_path",
+        "compatlab.scanners.rpm_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
@@ -387,7 +387,7 @@ def test_compare_command_supports_rpm_target_file_json_html(
     _write_profile(profile)
     write_test_rpm(artifact, files={"usr/bin/demo": b"\x7fELFfake"})
     monkeypatch.setattr(
-        "compatlab.rpm.scanner.scan_elf_path",
+        "compatlab.scanners.rpm_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -427,7 +427,7 @@ def test_compare_command_supports_rpm_builtin_target_fail_on_warning(
     artifact = tmp_path / "demo-1.0.0-1.x86_64.rpm"
     write_test_rpm(artifact, files={"usr/bin/demo": b"\x7fELFfake"})
     monkeypatch.setattr(
-        "compatlab.rpm.scanner.scan_elf_path",
+        "compatlab.scanners.rpm_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -456,7 +456,7 @@ def test_compare_command_supports_native_wheel_target_file(
     _write_wheel(artifact, native=True, purelib=False)
     _write_profile(profile)
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -494,7 +494,7 @@ def test_compare_command_supports_native_wheel_builtin_target_fail_on_warning(
     artifact = tmp_path / "demo-1.0.0-cp311-cp311-linux_x86_64.whl"
     _write_wheel(artifact, native=True, purelib=True)
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
@@ -519,7 +519,7 @@ def test_compare_command_writes_wheel_html_before_nonzero_exit(
     _write_wheel(artifact, native=True, purelib=False)
     _write_profile(profile)
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -592,7 +592,7 @@ def test_compare_command_fail_on_warning_returns_nonzero(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.elfscan.scanner.scan_path",
+        "compatlab.scanners.elf_scanner.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -629,7 +629,7 @@ def test_compare_command_fail_on_never_writes_diagnostic_json(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.elfscan.scanner.scan_path",
+        "compatlab.scanners.elf_scanner.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -687,7 +687,7 @@ def test_compare_command_fail_on_never_writes_html_and_returns_zero(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.elfscan.scanner.scan_path",
+        "compatlab.scanners.elf_scanner.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -726,7 +726,7 @@ def test_compare_command_fail_on_error_writes_html_before_nonzero_exit(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.elfscan.scanner.scan_path",
+        "compatlab.scanners.elf_scanner.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(
@@ -767,7 +767,7 @@ def test_compare_command_writes_json_and_html_together(
     _write_profile(profile)
 
     monkeypatch.setattr(
-        "compatlab.elfscan.scanner.scan_path",
+        "compatlab.scanners.elf_scanner.scanner.scan_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),

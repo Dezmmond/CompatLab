@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from compatlab.elfscan import (
+from compatlab.scanners.elf_scanner import (
     parse_dynamic_section,
     parse_elf_header,
     parse_program_headers,

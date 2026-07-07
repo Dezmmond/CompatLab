@@ -1,5 +1,9 @@
-from compatlab.elfscan.command import CommandResult, run_command, run_readelf
-from compatlab.elfscan.parsers import (
+from .command import (
+    CommandResult,
+    run_command,
+    run_readelf
+)
+from .parsers import (
     DynamicSectionParser,
     ElfHeaderParser,
     ProgramHeaderParser,
@@ -9,8 +13,14 @@ from compatlab.elfscan.parsers import (
     parse_program_headers,
     parse_version_info,
 )
-from compatlab.elfscan.scanner import ElfScanner, ScanWarningFactory, scan_path
+from .scanner import (
+    ElfScanner,
+    ScanWarningFactory,
+    scan_path
+)
+
 from compatlab.models import ElfInfo, SymbolVersion
+
 
 __all__ = [
     "CommandResult",

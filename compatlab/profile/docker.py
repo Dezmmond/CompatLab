@@ -8,8 +8,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from compatlab.compare.engine import normalize_architecture, parse_version_tuple
-from compatlab.elfscan.command import CommandResult, run_command, run_readelf
-from compatlab.elfscan.parsers import parse_version_info
+from compatlab.scanners.elf_scanner import CommandResult, run_command, run_readelf
+from compatlab.scanners.elf_scanner import parse_version_info
 from compatlab.models import FactWarning, SymbolVersionFacts, SystemFacts
 from compatlab.profile.rootfs import (
     detect_dynamic_linkers_in_tar,

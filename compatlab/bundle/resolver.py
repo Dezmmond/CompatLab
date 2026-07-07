@@ -1,7 +1,7 @@
 from collections import deque
 from pathlib import Path
 
-from compatlab.elfscan.scanner import scan_path
+from compatlab.scanners.elf_scanner import scan_path
 from compatlab.models import (
     DependencyEdge,
     DependencyGraph,

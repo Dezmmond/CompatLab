@@ -3,10 +3,10 @@ from pathlib import Path
 from rich.console import Console
 
 import compatlab.bundle.resolver as bundle_resolver
-import compatlab.elfscan.scanner as elf_scanner
+import compatlab.scanners.elf_scanner.scanner as elf_scanner
 import compatlab.profile.catalog as profile_catalog
-import compatlab.rpm.scanner as rpm_scanner
-import compatlab.wheels.scanner as wheel_scanner
+import compatlab.scanners.rpm_scanner as rpm_scanner
+import compatlab.scanners.wheel_scanner as wheel_scanner
 
 from compatlab.artifact.detect import ArtifactKind, detect_artifact_kind
 from compatlab.bundle.resolver import (

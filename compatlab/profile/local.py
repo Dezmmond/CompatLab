@@ -5,8 +5,8 @@ import platform
 from pathlib import Path
 
 from compatlab.compare import parse_version_tuple
-from compatlab.elfscan.command import CommandResult, run_command, run_readelf
-from compatlab.elfscan.parsers import parse_version_info
+from compatlab.scanners.elf_scanner import CommandResult, run_command, run_readelf
+from compatlab.scanners.elf_scanner import parse_version_info
 from compatlab.models import FactWarning, LibraryFact, SymbolVersionFacts, SystemFacts
 from compatlab.profile.parsers import (
     detect_dynamic_linkers,

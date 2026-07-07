@@ -1,10 +1,10 @@
-from pathlib import Path
 import zipfile
+from pathlib import Path
 
 from compatlab.artifact.detect import ArtifactKind, detect_artifact_kind
 from compatlab.diagnostics import summarize_diagnostics
 from compatlab.models import ArtifactInfo, ArtifactReport, ElfInfo, Problem
-from compatlab.wheels.scanner import scan_wheel
+from compatlab.scanners.wheel_scanner import scan_wheel
 
 
 def _write_wheel(
@@ -106,7 +106,7 @@ def test_scan_wheel_scans_native_entries(tmp_path: Path, monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
@@ -131,7 +131,7 @@ def test_scan_wheel_reports_purelib_with_native_code(tmp_path: Path, monkeypatch
         files={"demo/_native.abi3.so": b"\x7fELFfake"},
     )
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64"),
@@ -191,7 +191,7 @@ def test_native_entry_scan_warnings_are_retargeted(tmp_path: Path, monkeypatch) 
         files={"demo/_native.so": b"\x7fELFfake"},
     )
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(elf_class="ELF64"),
@@ -223,7 +223,7 @@ def test_native_entry_scan_failure_gets_wheel_error(tmp_path: Path, monkeypatch)
         files={"demo/_native.so": b"\x7fELFfake"},
     )
     monkeypatch.setattr(
-        "compatlab.wheels.scanner.scan_elf_path",
+        "compatlab.scanners.wheel_scanner.scan_elf_path",
         lambda path: ArtifactReport(
             artifact=ArtifactInfo(path=str(path), kind="ELF"),
             elf=ElfInfo(),
