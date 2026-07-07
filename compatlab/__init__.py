@@ -1,6 +1,6 @@
 """CompatLab ArtifactDoctor package."""
 
-__version__ = "0.1.0"
+__version__ = "1.2.0"
 
 from compatlab import (
     artifact,
@@ -11,7 +11,9 @@ from compatlab import (
     problem,
     profile,
     report,
+    rpm,
     services,
+    wheel,
 )
 from compatlab.models import (
     ArtifactInfo,
@@ -26,6 +28,8 @@ from compatlab.models import (
     LibraryFact,
     LibstdcxxProfile,
     OsReleaseFacts,
+    PackageEntry,
+    PackageMetadata,
     Problem,
     ProfileMetadata,
     ProvidedLibrary,
@@ -50,6 +54,8 @@ __all__ = [
     "LibraryFact",
     "LibstdcxxProfile",
     "OsReleaseFacts",
+    "PackageEntry",
+    "PackageMetadata",
     "Problem",
     "ProfileMetadata",
     "ProvidedLibrary",
@@ -66,5 +72,7 @@ __all__ = [
     "problem",
     "profile",
     "report",
+    "rpm",
     "services",
+    "wheel",
 ]

@@ -36,7 +36,7 @@ class ProfileFileWriter:
 
     @staticmethod
     def write_validation_json(
-            path: Path,
+        path: Path,
         *,
         profile_file: Path,
         status: str,

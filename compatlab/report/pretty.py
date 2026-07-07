@@ -13,6 +13,15 @@ class ProfileRow(Protocol):
 
 
 def render_report(report: ArtifactReport, console: Console) -> None:
+    if report.package is not None:
+        _render_package(report, console)
+        if report.target is not None:
+            console.print(f"[bold]Target:[/bold] {report.target.name} ({report.target.id})")
+        if report.diagnostics:
+            _render_diagnostics(report, console)
+        _render_summary(report, console)
+        return
+
     console.print(f"[bold]Artifact:[/bold] {report.artifact.path}")
     console.print(f"[bold]Kind:[/bold] {report.artifact.kind}")
     if report.artifact.size_bytes is not None:
@@ -84,6 +93,40 @@ def _render_elf(report: ArtifactReport, console: Console) -> None:
                 console.print(f"    - {version}")
 
 
+def _render_package(report: ArtifactReport, console: Console) -> None:
+    package = report.package
+    if package is None:
+        return
+    console.print(f"[bold]{package.type.upper()} package[/bold]")
+    console.print(f"  [bold]Path:[/bold] {report.artifact.path}")
+    label = " ".join(
+        value
+        for value in [
+            package.name,
+            _version_release(package.version, package.release),
+            package.architecture,
+        ]
+        if value
+    )
+    if label:
+        console.print(f"  [bold]Package:[/bold] {label}")
+    if package.summary:
+        console.print(f"  [bold]Summary:[/bold] {package.summary}")
+    if package.payload_file_count is not None:
+        console.print(f"  [bold]Payload files:[/bold] {package.payload_file_count}")
+    console.print(f"  [bold]Native ELF entries:[/bold] {len(report.entries)}")
+    if report.entries:
+        table = Table(title="Native compatibility")
+        table.add_column("Status", no_wrap=True)
+        table.add_column("Path")
+        table.add_column("Diagnostics")
+        for entry in report.entries:
+            status = "FAIL" if entry.summary.errors else "WARN" if entry.summary.warnings else "OK"
+            diagnostics = ", ".join(issue.code for issue in entry.diagnostics)
+            table.add_row(status, entry.path, diagnostics)
+        console.print(table)
+
+
 def _render_dependency_graph(report: ArtifactReport, console: Console) -> None:
     graph = report.dependency_graph
     if graph is None:
@@ -149,6 +192,12 @@ def _yes_no(value: bool | None) -> str | None:
     if value is None:
         return None
     return "yes" if value else "no"
+
+
+def _version_release(version: str | None, release: str | None) -> str | None:
+    if version and release:
+        return f"{version}-{release}"
+    return version or release
 
 
 def render_profiles(profiles: list[ProfileRow], console: Console) -> None:

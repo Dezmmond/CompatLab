@@ -16,8 +16,10 @@ profile generation from the current system or Docker image rootfs exports.
 
 ```bash
 compatlab scan ./app
+compatlab scan ./dist/example-1.0.0-1.x86_64.rpm
 compatlab scan ./dist/my-app --bundle-root ./dist --recursive
 compatlab compare ./app --target ubuntu-1804
+compatlab compare ./dist/example-1.0.0-1.x86_64.rpm --target ubuntu-2204
 compatlab compare ./app --target-file ./local.yaml
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --fail-on warning
@@ -35,7 +37,9 @@ JSON report output is wired for scan and compare:
 
 ```bash
 compatlab scan ./app --json report.json
+compatlab scan ./dist/example-1.0.0-1.x86_64.rpm --json report.json
 compatlab compare ./app --target ubuntu-1804 --json report.json
+compatlab compare ./dist/example-1.0.0-1.x86_64.rpm --target-file ./profiles/prod.yaml --json report.json --html report.html
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --json report.json
 compatlab compare ./dist/my-app --target-file ./local.yaml --bundle-root ./dist --recursive --fail-on never --json report.json
 compatlab profiles detect --json system-facts.json
@@ -68,6 +72,31 @@ uv run compatlab compare ./dist/my-app \
 The HTML report includes the diagnostic summary, normalized diagnostic issues,
 bundle dependency resolution details, legacy compatibility problems and
 warnings, and compact ELF/target metadata.
+
+## RPM Package Scanning
+
+CompatLab accepts RPM (`.rpm`) packages in the existing `scan` and `compare`
+commands. RPM scanning is static: CompatLab reads package metadata, inspects the
+payload, discovers native ELF files, safely extracts only those native entries
+into a temporary directory, and reuses the existing ELF scanner and compatibility
+rules for each entry.
+
+```bash
+uv run compatlab scan ./dist/example-1.0.0-1.x86_64.rpm
+
+uv run compatlab compare ./dist/example-1.0.0-1.x86_64.rpm \
+  --target ubuntu-2204
+
+uv run compatlab compare ./dist/example-1.0.0-1.x86_64.rpm \
+  --target-file ./profiles/prod.yaml \
+  --json report.json \
+  --html report.html
+```
+
+RPM reports include package metadata, payload file counts, native ELF entry
+details, package-level diagnostics, and per-entry compatibility diagnostics.
+CompatLab does not install the RPM, execute package scripts, run payload
+binaries, solve YUM/DNF dependencies, or perform vulnerability scanning.
 
 ## Docker Image Profiles
 
@@ -216,7 +245,7 @@ The first MVP is intentionally narrow:
 ## Not In Scope Yet
 
 CompatLab does not add arbitrary package installation, Dockerfile generation,
-Docker image mutation/commit, web UI, database, daemon, wheel/RPM/DEB analysis,
+Docker image mutation/commit, web UI, database, daemon, DEB analysis,
 SBOM/security scanning, automatic patching, or a Go implementation. Those are
 explicitly outside the current implementation pass.
 

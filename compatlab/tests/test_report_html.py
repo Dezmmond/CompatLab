@@ -13,6 +13,8 @@ from compatlab.models import (
     ElfInfo,
     LibcProfile,
     LibstdcxxProfile,
+    PackageEntry,
+    PackageMetadata,
     Problem,
     SymbolVersion,
     TargetProfile,
@@ -179,3 +181,47 @@ def test_html_report_renders_legacy_issues_and_technical_details() -> None:
     assert "Raw Metadata / Technical Details" in html
     assert "GLIBC_2.34" in html
     assert "glibc 2.39" in html
+
+
+def test_html_report_renders_rpm_metadata_entries_and_escapes_values() -> None:
+    diagnostics = [
+        DiagnosticIssue(
+            code="CL_RPM_NO_ELF_ENTRIES",
+            severity=DiagnosticSeverity.INFO,
+            category=DiagnosticCategory.PACKAGE,
+            title="No ELF",
+            message="none",
+        )
+    ]
+    report = ArtifactReport(
+        artifact=ArtifactInfo(path="/tmp/demo.rpm", kind="rpm"),
+        package=PackageMetadata(
+            type="rpm",
+            name="<demo>",
+            version="1.0",
+            release="1",
+            architecture="x86_64",
+            summary="RPM & package",
+            payload_file_count=1,
+            native_entry_count=1,
+        ),
+        entries=[
+            PackageEntry(
+                path="/usr/bin/demo&tool",
+                size=7,
+                elf=ElfInfo(elf_class="ELF64", machine="Advanced Micro Devices X86-64"),
+                diagnostics=diagnostics,
+                summary=summarize_diagnostics(diagnostics),
+            )
+        ],
+        diagnostics=diagnostics,
+        summary=summarize_diagnostics(diagnostics),
+    )
+
+    html = render_html_report(report, context=_context())
+
+    assert "RPM Metadata" in html
+    assert "Package Native Entries" in html
+    assert "&lt;demo&gt;" in html
+    assert "RPM &amp; package" in html
+    assert "/usr/bin/demo&amp;tool" in html

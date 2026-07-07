@@ -41,6 +41,8 @@ def render_html_report(report: ArtifactReport, *, context: HtmlReportContext) ->
             _render_header(report, context, generated_at),
             _render_summary(report.summary),
             _render_diagnostics(report.diagnostics),
+            _render_package_metadata(report),
+            _render_package_entries(report),
             _render_dependency_graph(report.dependency_graph),
             _render_legacy_issues(report.problems, report.warnings),
             _render_technical_details(report),
@@ -157,6 +159,66 @@ def _render_diagnostics(diagnostics: Sequence[DiagnosticIssue]) -> str:
             ],
             rows,
             empty="No diagnostics.",
+        ),
+    )
+
+
+def _render_package_metadata(report: ArtifactReport) -> str:
+    package = report.package
+    if package is None:
+        return ""
+    rows = [
+        ("Package type", package.type),
+        ("Name", package.name),
+        ("Epoch", package.epoch),
+        ("Version", package.version),
+        ("Release", package.release),
+        ("Architecture", package.architecture),
+        ("Summary", package.summary),
+        ("License", package.license),
+        ("Vendor", package.vendor),
+        ("Group", package.group),
+        ("Build time", package.build_time),
+        ("Source RPM", package.source_rpm),
+        ("Payload files", package.payload_file_count),
+        ("Native ELF entries", package.native_entry_count),
+    ]
+    return _section(f"{package.type.upper()} Metadata", _definition_list(rows))
+
+
+def _render_package_entries(report: ArtifactReport) -> str:
+    if report.package is None:
+        return ""
+    rows = [
+        (
+            entry.path,
+            entry.kind,
+            entry.size,
+            _entry_status(entry),
+            entry.summary.errors,
+            entry.summary.warnings,
+            entry.summary.infos,
+            entry.elf.machine if entry.elf is not None else None,
+            ", ".join(issue.code for issue in entry.diagnostics),
+        )
+        for entry in report.entries
+    ]
+    return _section(
+        "Package Native Entries",
+        _table(
+            [
+                "Path",
+                "Kind",
+                "Size",
+                "Status",
+                "Errors",
+                "Warnings",
+                "Info",
+                "Machine",
+                "Diagnostic Codes",
+            ],
+            rows,
+            empty="No native ELF entries.",
         ),
     )
 
@@ -352,6 +414,14 @@ def _symbol_versions(versions: Sequence[SymbolVersion]) -> str:
     return "; ".join(
         f"{namespace}: {', '.join(values)}" for namespace, values in sorted(grouped.items())
     )
+
+
+def _entry_status(entry) -> str:
+    if entry.summary.errors:
+        return "failed"
+    if entry.summary.warnings:
+        return "warning"
+    return "passed"
 
 
 _CSS = """
