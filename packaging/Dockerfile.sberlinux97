@@ -1,0 +1,49 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ENV PYTHONUNBUFFERED=1
+ENV UV_LINK_MODE=copy
+
+RUN dnf update -y && dnf install -y --allowerasing \
+    ca-certificates \
+    curl \
+    python3.11 \
+    python3.11-devel \
+    gcc \
+    gcc-c++ \
+    make \
+    patchelf \
+    ccache \
+    binutils \
+    libatomic \
+    && dnf clean all
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+WORKDIR /src
+
+COPY . /src
+
+RUN uv sync --all-extras --dev
+
+RUN uv run pytest
+
+RUN mkdir -p build && \
+    printf '%s\n' \
+    'from compatlab.cli import app' \
+    '' \
+    'app()' \
+    > build/compatlab_entry.py
+
+RUN uv add --dev nuitka ordered-set zstandard
+
+RUN uv run python -m nuitka \
+    --onefile \
+    --standalone \
+    --follow-imports \
+    --include-package=compatlab \
+    --include-package-data=compatlab \
+    --output-dir=/out \
+    --output-filename=compatlab \
+    build/compatlab_entry.py

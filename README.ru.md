@@ -52,6 +52,10 @@ compatlab compare ./app --target ubuntu-1804 --json report.json
 make test
 make coverage
 make check
+make build-bin-ubuntu2204
+make test-bin-ubuntu2204
+make build-bin-sberlinux97
+make test-bin-sberlinux97
 uv run compatlab scan /bin/bash
 ```
 
